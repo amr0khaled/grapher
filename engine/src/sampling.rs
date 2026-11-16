@@ -8,21 +8,47 @@ pub(crate) fn sample(
     width: u32,
     height: u32,
 ) -> Vec<f64> {
+    if let Some(idx) = expr.find('=') {
+        let lhs = expr[..idx].trim().to_lowercase();
+        let rhs = expr[idx + 1..].trim();
+        let rhs_tree = match parse_expr(rhs) {
+            Ok(t) => t,
+            Err(_) => return Vec::new(),
+        };
+        let lhs_tree = match parse_expr(&lhs) {
+            Ok(t) => t,
+            Err(_) => return Vec::new(),
+        };
+        let f = |x: f64, y: f64| rhs_tree.eval(x, y) - lhs_tree.eval(x, y);
+
+        // Marching squares / zero-crossing grid sampling for implicit f(x,y)=0
+        let step = 4;
+        let mut out: Vec<f64> = Vec::new();
+        for py in (0..height as usize).step_by(step) {
+            for px in (0..width as usize).step_by(step) {
+                let x = (px as f64 - offset_x) / scale;
+                let y = (offset_y - py as f64) / scale;
+                let v = f(x, y);
+                if v.is_finite() && v.abs() < 0.2 {
+                    out.push(px as f64);
+                    out.push(py as f64);
+                } else {
+                    out.push(f64::NAN);
+                    out.push(f64::NAN);
+                }
+            }
+        }
+        return out;
+    }
+
     let mut clean = expr;
     let mut is_x_eq = false;
 
-    if let Some(idx) = clean.find('=') {
-        let lhs = clean[..idx].trim().to_lowercase();
-        let rhs = clean[idx + 1..].trim();
-        if lhs == "x" {
-            is_x_eq = true;
-            clean = rhs;
-        } else if lhs == "y" {
-            clean = rhs;
-        } else {
-            // implicit or general expression like x^2 + y^2 = 4 -> treat as y = rhs - lhs or similar, or parse rhs
-            clean = rhs;
-        }
+    if clean.starts_with("x=") || clean.starts_with("X=") {
+        is_x_eq = true;
+        clean = &clean[2..];
+    } else if clean.starts_with("y=") || clean.starts_with("Y=") {
+        clean = &clean[2..];
     }
 
     let tree = match parse_expr(clean) {
@@ -35,7 +61,6 @@ pub(crate) fn sample(
     let mut out: Vec<f64> = Vec::new();
 
     if is_x_eq {
-        // Sample along py (screen y), computing x = f(y)
         let mut py = 0.0_f64;
         while py <= height_f {
             let y = (offset_y - py) / scale;
@@ -56,16 +81,12 @@ pub(crate) fn sample(
             py += 1.0;
         }
     } else {
-        // Sample along px (screen x), computing y = f(x)
         let mut px = 0.0_f64;
-        // (x, y) of the previous finite sample, for pole detection
         let mut prev: Option<(f64, f64)> = None;
         while px <= width_f {
             let x = (px - offset_x) / scale;
             let y = tree.eval(x, 0.0);
             if y.is_finite() {
-                // Vertical-asymptote heuristic: y flips sign between samples.
-                // A zero crossing has a small midpoint; a pole blows up between them.
                 let is_pole = match prev {
                     Some((xp, yp)) if yp * y < 0.0 => {
                         let ym = tree.eval((xp + x) * 0.5, 0.0);
@@ -74,8 +95,6 @@ pub(crate) fn sample(
                     _ => false,
                 };
                 if is_pole {
-                    // Break the path: NaN pair to end the previous segment,
-                    // NaN pair so the next finite point starts a new segment.
                     out.push(f64::NAN);
                     out.push(f64::NAN);
                     out.push(f64::NAN);
