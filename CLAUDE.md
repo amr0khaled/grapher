@@ -4,14 +4,24 @@
 **Stack:** Svelte + Vite front, Rust→WASM math engine (wasm-bindgen, bundled by wasm-pack), later Tauri desktop shell.
 **Memory:** see `.claude/memory/` (project state, gaps, decisions).
 
-## MVP (today)
-- Sidebar: line-by-line equations (add/remove/edit).
-- Main view: 2D graph area.
-- Math core: y=f(x) graphing, LaTeX parse + render, interval arithmetic for implicit.
+## Commands
+- dev: `bun run dev` (vite)
+- build: `bun run build` (vite)
+- preview: `bun run preview`
+- check: `bun run check` (svelte-check)
+- wasm build: `cargo build --release` in `engine/` + copy `engine/target/release/*.wasm` to `src/wasm/` (WASM prebuilt)
+
+## MVP (done)
+- Sidebar: line-by-line equations (add/remove/edit) via `src/components/EquationList.svelte` + `src/components/EquationInput.svelte`.
+- Main view: 2D graph area via `src/components/GraphCanvas.svelte`.
+- Math core: `y=f(x)` graphing with LaTeX parse + render via MathLive `<math-field>`.
 - View: pan/zoom, adaptive sample.
+- Symbol assignment & reactive dependent evaluation (`m = 5`, `n = m/2`) via `src/utils/symbols.ts` (`evalAssignments`, `evalExpr`, `parseAssignment`).
+- Evaluated value badge bottom-right of equation rows when unambiguous.
+- Enter-key new line creation + focus; Arrow Up/Down line navigation.
 
 ## Later (roadmap)
-- Complex numbers, vectors/matrices to manipulate points+grid, 3D implicit, regressions, actions, animations, tables, sliders, full Desmos parity.
+- Complex numbers, vectors/matrices, 3D implicit, regressions, actions, animations, tables, sliders, full Desmos parity.
 
 ## Hard parts (Desmos-grade)
 1. Implicit f(x,y)=0 (marching squares + interval arithmetic + adaptive refine).
@@ -20,27 +30,18 @@
 4. Asymptotes, sin(1/x), tan poles, domain holes, near-tangencies.
 5. Incremental redraw, viewport culling, worker offload.
 
-## Risks/gaps
-- Interval arithmetic lib choice for Rust (eval vs custom).
-- LaTeX parser in Rust (pulldown-cmark? mathjax-like? KaTeX bridge?).
-- GPU: WebGL vs Canvas2D hybrid.
-- Tauri shell later; keep wasm-bindgen portable.
-- Build pipeline: vite + wasm-pack.
+## Current architecture
+- `src/App.svelte`: shell — layout grid (sidebar + graph), view state (scale/offset), pan/zoom handlers, `engineReady` gate.
+- `src/layouts/Sidebar.svelte`: renders equation list.
+- `src/components/EquationInput.svelte`: MathLive `<math-field>` editor, `onInput` edits sync `value` via `$bindable`, `onMount` attaches field, `enter` handler triggers `onAddLine`.
+- `src/components/GraphCanvas.svelte`: SVG grid/axes/paths, samples each expression via `sampleToPath` → Rust WASM `sample()`.
+- `src/utils/math.ts`: `sampleToPath` (WASM sample → SVG path `M`/`L`, NaN breaks segments), `generateGridLines` (1/2/5 nice grid).
+- `src/utils/symbols.ts`: `SymbolTable`, `parseAssignment`, `evalExpr` (plain infix only — LaTeX braces rejected), implicit multiplication insertion, recursive-descent parser.
+- `src/utils/latex.ts`: `toLatex` (plain→KaTeX: `^`→`^{}`, `/`→`\frac`, `sqrt`/`sum`/`int`/`infinity`, `*`→`\cdot`).
+- `src/wasm/`: prebuilt Rust WASM engine (`grapher_engine_bg.js` + `.wasm`).
+- `engine/src/lib.rs`: Rust math engine (tokenizer, recursive descent, `sqrt`/`sin`/`cos`/`tan`/`pi`, `sample()` FFI).
+- `src/types.ts`: `ExpressionLine`, `GridLine`.
 
-## Perf rules (non-negotiable)
-- Rust resident data, batch crosses, reuse buffers, typed arrays, no per-field marshal.
-- Avoid JSON on hot path; use flat buffers.
-- Benchmark: many-tiny-calls vs 1-big-buffer vs serde path; pick per workload.
-
-## Commands (fill when scaffolded)
-- dev: `npm run dev` or `vite`
-- wasm build: `wasm-pack build ...`
-- test: `cargo test` + wasm tests
-- lint: `cargo fmt/clippy`, svelte-check
-
-## Files
-- `src/lib/` Rust engine (parser, evaluator, implicit, sampling, FFI)
-- `src/` Svelte UI (sidebar, graph, latex view)
-- `public/` static assets
-- `CLAUDE.md` this file
-- `.claude/memory/` durable project memory (read on start, not echoed every turn)
+## Git workflow
+- `main` is release branch.
+- New features: create feature branch (`git checkout -b feature/<name>`), PR/merge into `main` when verified.
