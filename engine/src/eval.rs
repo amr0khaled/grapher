@@ -1,62 +1,87 @@
-use std::collections::HashMap;
-
+use std::collections::{HashMap, HashSet};
 use crate::parser::Node;
 
+#[derive(Debug, Clone, Default)]
+pub struct SymbolTable {
+    exprs: HashMap<char, Node>,
+    funcs: HashMap<char, (Vec<char>, Node)>,
+}
+
+impl SymbolTable {
+    pub fn new() -> Self {
+        Self {
+            exprs: HashMap::new(),
+            funcs: HashMap::new(),
+        }
+    }
+    pub fn set_expr(&mut self, name: char, expr: Node) {
+        self.exprs.insert(name, expr);
+    }
+    pub fn set_func(&mut self, name: char, args: Vec<char>, body: Node) {
+        self.funcs.insert(name, (args, body));
+    }
+    pub fn eval_symbol(&self, name: char, x: f64, y: f64) -> f64 {
+        let mut visited = HashSet::new();
+        self.eval_rec(name, x, y, &mut visited)
+    }
+    fn eval_rec(&self, name: char, x: f64, y: f64, visited: &mut HashSet<char>) -> f64 {
+        if !visited.insert(name) { return f64::NAN; }
+        let res = match self.exprs.get(&name) {
+            Some(node) => node.eval_with_symbols_rec(x, y, self, visited),
+            None => f64::NAN,
+        };
+        visited.remove(&name);
+        res
+    }
+}
+
 impl Node {
-    pub(crate) fn eval(&self, x: f64, y: f64) -> f64 {
+    pub fn eval(&self, x: f64, y: f64) -> f64 {
+        let st = SymbolTable::new();
+        let mut visited = HashSet::new();
+        self.eval_with_symbols_rec(x, y, &st, &mut visited)
+    }
+
+    pub fn eval_with_symbols(&self, x: f64, y: f64, st: &SymbolTable) -> f64 {
+        let mut visited = HashSet::new();
+        self.eval_with_symbols_rec(x, y, st, &mut visited)
+    }
+
+    pub fn eval_with_symbols_rec(&self, x: f64, y: f64, st: &SymbolTable, visited: &mut HashSet<char>) -> f64 {
         match self {
             Node::Num(n) => *n,
             Node::VarX => x,
             Node::VarY => y,
-            Node::Var(c) => 1.0,
-            Node::Neg(a) => -a.eval(x, y),
-            Node::Add(a, b) => a.eval(x, y) + b.eval(x, y),
-            Node::Sub(a, b) => a.eval(x, y) - b.eval(x, y),
-            Node::Mul(a, b) => a.eval(x, y) * b.eval(x, y),
+            Node::Var(c) => st.eval_rec(*c, x, y, visited),
+            Node::Neg(a) => -a.eval_with_symbols_rec(x, y, st, visited),
+            Node::Add(a, b) => a.eval_with_symbols_rec(x, y, st, visited) + b.eval_with_symbols_rec(x, y, st, visited),
+            Node::Sub(a, b) => a.eval_with_symbols_rec(x, y, st, visited) - b.eval_with_symbols_rec(x, y, st, visited),
+            Node::Mul(a, b) => a.eval_with_symbols_rec(x, y, st, visited) * b.eval_with_symbols_rec(x, y, st, visited),
             Node::Div(a, b) => {
-                let d = b.eval(x, y);
-                if d == 0.0 {
-                    f64::NAN
-                } else {
-                    a.eval(x, y) / d
-                }
+                let d = b.eval_with_symbols_rec(x, y, st, visited);
+                if d == 0.0 { f64::NAN } else { a.eval_with_symbols_rec(x, y, st, visited) / d }
             }
-            Node::Pow(a, b) => a.eval(x, y).powf(b.eval(x, y)),
+            Node::Pow(a, b) => a.eval_with_symbols_rec(x, y, st, visited).powf(b.eval_with_symbols_rec(x, y, st, visited)),
             Node::Fn(name, a) => {
-                let v = a.eval(x, y);
-                match *name {
+                let name_char = name.chars().next().unwrap_or(' ');
+                if let Some((args, body)) = st.funcs.get(&name_char) {
+                    let arg_val = a.eval_with_symbols_rec(x, y, st, visited);
+                    if args[0] == 'x' {
+                        return body.eval_with_symbols_rec(arg_val, y, st, visited);
+                    }
+                    if args[0] == 'y' {
+                        return body.eval_with_symbols_rec(x, arg_val, st, visited);
+                    }
+                    let mut sub_st = st.clone();
+                    sub_st.set_expr(args[0], Node::Num(arg_val));
+                    return body.eval_with_symbols_rec(x, y, &sub_st, visited);
+                }
+                let v = a.eval_with_symbols_rec(x, y, st, visited);
+                match name.as_str() {
                     "sin" => v.sin(),
                     "cos" => v.cos(),
                     "tan" => v.tan(),
-                    "asin" => v.asin(),
-                    "acos" => v.acos(),
-                    "atan" => v.atan(),
-                    "sqrt" => {
-                        if v < 0.0 {
-                            f64::NAN
-                        } else {
-                            v.sqrt()
-                        }
-                    }
-                    "abs" => v.abs(),
-                    "floor" => v.floor(),
-                    "ceil" => v.ceil(),
-                    "round" => v.round(),
-                    "log" => {
-                        if v <= 0.0 {
-                            f64::NAN
-                        } else {
-                            v.log10()
-                        }
-                    }
-                    "ln" => {
-                        if v <= 0.0 {
-                            f64::NAN
-                        } else {
-                            v.ln()
-                        }
-                    }
-                    "exp" => v.exp(),
+                    "sqrt" => if v < 0.0 { f64::NAN } else { v.sqrt() },
                     _ => f64::NAN,
                 }
             }
@@ -64,15 +89,11 @@ impl Node {
     }
 }
 
-pub(crate) fn eval_expr(expr: &str, x: f64, y: f64) -> f64 {
+pub fn eval_expr(expr: &str, x: f64, y: f64) -> f64 {
     match crate::parser::parse_expr(expr) {
         Ok(tree) => {
             let v = tree.eval(x, y);
-            if v.is_finite() {
-                v
-            } else {
-                f64::NAN
-            }
+            if v.is_finite() { v } else { f64::NAN }
         }
         Err(_) => f64::NAN,
     }

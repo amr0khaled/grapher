@@ -22,7 +22,9 @@
     symbols?: Record<string, number>;
   } = $props();
 
-  let mathFieldEl: HTMLElement & { value?: string; focus?: () => void } | null = null;
+  let mathFieldEl:
+    | (HTMLElement & { value?: string; focus?: () => void })
+    | null = null;
 
   onMount(() => {
     if (mathFieldEl) {
@@ -39,7 +41,9 @@
           onAddLine?.(index);
           setTimeout(() => {
             const fields = document.querySelectorAll("math-field");
-            const next = fields[index + 1] as HTMLElement & { focus?: () => void };
+            const next = fields[index + 1] as HTMLElement & {
+              focus?: () => void;
+            };
             if (next && next.focus) next.focus();
           }, 0);
         }
@@ -76,6 +80,9 @@
   <math-field
     bind:this={mathFieldEl}
     class="eq-input"
+    smart-fence="true"
+    math-virtual-keyboard-policy="off"
+    virtual-keyboard-name="numeric-only"
   ></math-field>
   {#if badgeValue !== undefined && badgeValue !== null}
     <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
@@ -83,6 +90,12 @@
 </div>
 
 <style>
+  math-field::part(menu-toggle) {
+    display: none;
+  }
+  math-field::part(virtual-keyboard-toggle) {
+    height: 16px;
+  }
   .equation-row {
     display: flex;
     align-items: center;
@@ -139,3 +152,4 @@
     white-space: nowrap;
   }
 </style>
+

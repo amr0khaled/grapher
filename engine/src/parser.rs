@@ -8,7 +8,7 @@ pub(crate) enum Tok {
     VarX,
     VarY,
     Var(char),
-    Fn(&'static str),
+    Fn(String),
     Op(char),
     LParen,
     RParen,
@@ -49,31 +49,23 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
             }
-            let word = std::str::from_utf8(&b[start..i]).unwrap();
+let word = std::str::from_utf8(&b[start..i]).unwrap();
             match word {
                 "x" | "X" => out.push(Tok::VarX),
                 "y" | "Y" => out.push(Tok::VarY),
                 "pi" | "PI" | "π" => out.push(Tok::Num(std::f64::consts::PI)),
                 "e" | "E" => out.push(Tok::Num(std::f64::consts::E)),
-                "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "sqrt" | "abs" | "floor"
-                | "ceil" | "round" | "log" | "ln" | "exp" => out.push(Tok::Fn(match word {
-                    "sin" => "sin",
-                    "cos" => "cos",
-                    "tan" => "tan",
-                    "asin" => "asin",
-                    "acos" => "acos",
-                    "atan" => "atan",
-                    "sqrt" => "sqrt",
-                    "abs" => "abs",
-                    "floor" => "floor",
-                    "ceil" => "ceil",
-                    "round" => "round",
-                    "log" => "log",
-                    "ln" => "ln",
-                    "exp" => "exp",
-                    _ => unreachable!(),
-                })),
-                _ => word.chars().for_each(|e| out.push(Tok::Var(e))),
+                _ => {
+                    let mut j = i;
+                    while j < b.len() && b[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if j < b.len() && b[j] == b'(' {
+                        out.push(Tok::Fn(word.to_string()));
+                    } else {
+                        word.chars().for_each(|e| out.push(Tok::Var(e)));
+                    }
+                }
             }
         } else if c == b'+' || c == b'-' || c == b'*' || c == b'/' || c == b'^' {
             out.push(Tok::Op(c as char));
@@ -203,8 +195,8 @@ impl Parser {
     }
 }
 
-#[derive(Debug)]
-pub(crate) enum Node {
+#[derive(Debug, Clone, PartialEq)]
+pub enum Node {
     Num(f64),
     VarX,
     VarY,
@@ -215,7 +207,7 @@ pub(crate) enum Node {
     Mul(Box<Node>, Box<Node>),
     Div(Box<Node>, Box<Node>),
     Pow(Box<Node>, Box<Node>),
-    Fn(&'static str, Box<Node>),
+    Fn(String, Box<Node>),
 }
 
 pub fn parse_expr(s: &str) -> Result<Node, String> {
@@ -227,4 +219,14 @@ pub fn parse_expr(s: &str) -> Result<Node, String> {
         return Err("trailing tokens".to_string());
     }
     Ok(tree)
+}
+
+pub fn parse_assignment(s: &str) -> Result<(char, Node), String> {
+    let parts: Vec<&str> = s.split('=').collect();
+    if parts.len() != 2 { return Err("invalid assignment".to_string()); }
+    let name = parts[0].trim();
+    if name.len() != 1 { return Err("invalid symbol name".to_string()); }
+    let c = name.chars().next().unwrap();
+    let node = parse_expr(parts[1])?;
+    Ok((c, node))
 }

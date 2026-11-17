@@ -1,7 +1,10 @@
-mod parser;
-mod eval;
+pub mod parser;
+pub mod eval;
 mod sampling;
 mod utils;
+
+pub use crate::eval::{SymbolTable, eval_expr};
+pub use crate::parser::{parse_assignment, parse_expr};
 
 use wasm_bindgen::prelude::*;
 
