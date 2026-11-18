@@ -2,6 +2,10 @@ use crate::utils::{insert_implicit_mul, preprocess_latex};
 
 // --- Tokenizer ---
 
+// Builtin function names containing digits; tokenizer reads [a-zA-Z]+ first,
+// so these need longest-match handling or they split into name + number.
+const DIGIT_BUILTINS: &[&str] = &["atan2", "log10", "log2"];
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Tok {
     Num(f64),
@@ -46,6 +50,27 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                 .map_err(|_| "bad number".to_string())?;
             out.push(Tok::Num(n));
         } else if c.is_ascii_alphabetic() {
+            // Longest match for digit-bearing builtins: atan2, log2, log10
+            let mut matched: Option<&str> = None;
+            for name in DIGIT_BUILTINS {
+                let nb = name.as_bytes();
+                if b.len() - i >= nb.len() && b[i..i + nb.len()].eq_ignore_ascii_case(nb) {
+                    // require followed by '(' (possibly with whitespace)
+                    let mut j = i + nb.len();
+                    while j < b.len() && b[j].is_ascii_whitespace() { j += 1; }
+                    if j < b.len() && b[j] == b'(' {
+                        matched = Some(*name);
+                        break;
+                    }
+                }
+            }
+            if let Some(name) = matched {
+                let mut j = i + name.len();
+                while j < b.len() && b[j].is_ascii_whitespace() { j += 1; }
+                out.push(Tok::Fn(name.to_string()));
+                i = j;
+                continue;
+            }
             let start = i;
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
