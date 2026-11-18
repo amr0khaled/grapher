@@ -16,7 +16,10 @@
 - Main view: 2D graph area via `src/components/GraphCanvas.svelte`.
 - Math core: `y=f(x)` graphing with LaTeX parse + render via MathLive `<math-field>`.
 - View: pan/zoom, adaptive sample.
-- Symbol assignment & reactive dependent evaluation (`m = 5`, `n = m/2`) via `src/utils/symbols.ts` (`evalAssignments`, `evalExpr`, `parseAssignment`).
+- Symbol assignment & reactive dependent evaluation (`m = 5`, `n = m/2`) handled natively in Rust (`engine/src/eval.rs`, `engine/src/sampling.rs`).
+- Index-aligned batch expression sampling (`sampleAllToPaths`) passing flat Float64Arrays.
+- LaTeX-to-infix conversion (`toPlainInfix` in `src/utils/latex.ts`) supporting MathLive expressions like `F^x`.
+- Stable 1/2/5 nice grid generation with 80px target spacing and anti-flash thresholds.
 - Evaluated value badge bottom-right of equation rows when unambiguous.
 - Enter-key new line creation + focus; Arrow Up/Down line navigation.
 
