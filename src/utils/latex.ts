@@ -1,3 +1,18 @@
+export function toPlainInfix(latex: string): string {
+  let out = latex;
+  // Convert LaTeX superscripts ^{exp} back to ^exp
+  out = out.replace(/\^\{([^}]+)\}/g, '^$1');
+  // Convert fractions \frac{a}{b} back to (a)/(b)
+  out = out.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
+  // Convert cdot to *
+  out = out.replace(/\\cdot/g, '*');
+  // Remove curly braces from functions
+  out = out.replace(/\\(sqrt|sum|int)\{([^}]+)\}/g, '$1($2)');
+  // Cleanup infinity
+  out = out.replace(/\\infty/g, 'infinity');
+  return out;
+}
+
 // Convert plain-math input to LaTeX for KaTeX rendering.
 
 // Find matching closing index for text[open] (text[open] === '(')

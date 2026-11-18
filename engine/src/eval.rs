@@ -24,6 +24,14 @@ impl SymbolTable {
         let mut visited = HashSet::new();
         self.eval_rec(name, x, y, &mut visited)
     }
+    pub fn symbol_values(&self, x: f64, y: f64) -> Vec<(String, f64)> {
+        let mut out = Vec::new();
+        for (name, _) in &self.exprs {
+            let v = self.eval_symbol(*name, x, y);
+            out.push((name.to_string(), v));
+        }
+        out
+    }
     fn eval_rec(&self, name: char, x: f64, y: f64, visited: &mut HashSet<char>) -> f64 {
         if !visited.insert(name) { return f64::NAN; }
         let res = match self.exprs.get(&name) {

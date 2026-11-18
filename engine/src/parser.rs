@@ -49,7 +49,7 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
             }
-let word = std::str::from_utf8(&b[start..i]).unwrap();
+            let word = std::str::from_utf8(&b[start..i]).unwrap();
             match word {
                 "x" | "X" => out.push(Tok::VarX),
                 "y" | "Y" => out.push(Tok::VarY),
@@ -221,11 +221,43 @@ pub fn parse_expr(s: &str) -> Result<Node, String> {
     Ok(tree)
 }
 
+pub fn parse_function_definition(s: &str) -> Result<(char, char, Node), String> {
+    let parts: Vec<&str> = s.split('=').collect();
+    if parts.len() != 2 {
+        return Err("invalid function definition".to_string());
+    }
+    let lhs = parts[0].trim();
+    let inner = lhs.strip_suffix(')').ok_or("expected )")?;
+    let open = inner.find('(').ok_or("expected (")?;
+    let name = inner[..open].trim();
+    let arg = inner[open + 1..].trim();
+    if name.chars().count() != 1 {
+        return Err("function name must be one char".to_string());
+    }
+    if arg.chars().count() != 1 {
+        return Err("function arg must be one char".to_string());
+    }
+    let name_c = name.chars().next().unwrap();
+    if !name_c.is_ascii_alphabetic() {
+        return Err("function name must be a letter".to_string());
+    }
+    let arg_c = arg.chars().next().unwrap();
+    if !arg_c.is_ascii_alphabetic() {
+        return Err("function arg must be a letter".to_string());
+    }
+    let body = parse_expr(parts[1])?;
+    Ok((name_c, arg_c, body))
+}
+
 pub fn parse_assignment(s: &str) -> Result<(char, Node), String> {
     let parts: Vec<&str> = s.split('=').collect();
-    if parts.len() != 2 { return Err("invalid assignment".to_string()); }
+    if parts.len() != 2 {
+        return Err("invalid assignment".to_string());
+    }
     let name = parts[0].trim();
-    if name.len() != 1 { return Err("invalid symbol name".to_string()); }
+    if name.len() != 1 {
+        return Err("invalid symbol name".to_string());
+    }
     let c = name.chars().next().unwrap();
     let node = parse_expr(parts[1])?;
     Ok((c, node))

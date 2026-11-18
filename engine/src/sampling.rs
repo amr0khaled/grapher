@@ -1,124 +1,133 @@
-use crate::parser::parse_expr;
+use crate::eval::SymbolTable;
+use crate::parser::{parse_assignment, parse_expr};
+use std::collections::HashSet;
 
-pub(crate) fn sample(
-    expr: &str,
+fn strip_axis_prefix(s: &str) -> Option<(bool, &str)> {
+    let lower = s.to_lowercase();
+    let first = lower.chars().next()?;
+    if first != 'x' && first != 'y' {
+        return None;
+    }
+    let rest = lower[first.len_utf8()..].trim_start();
+    if !rest.starts_with('=') {
+        return None;
+    }
+    let eq_idx = s.find('=')?;
+    Some((first == 'x', s[eq_idx + 1..].trim()))
+}
+
+fn build_symbols(lines: &[String]) -> SymbolTable {
+    let mut symbols = SymbolTable::new();
+    for line in lines {
+        let trimmed = line.trim();
+        if strip_axis_prefix(trimmed).is_some() {
+            continue;
+        }
+        if !trimmed.contains('=') {
+            continue;
+        }
+        if let Ok((name, node)) = parse_assignment(trimmed) {
+            symbols.set_expr(name, node);
+        }
+    }
+    symbols
+}
+
+pub fn sample(
+    lines: Vec<String>,
     scale: f64,
     offset_x: f64,
     offset_y: f64,
     width: u32,
     height: u32,
-) -> Vec<f64> {
-    if let Some(idx) = expr.find('=') {
-        let lhs = expr[..idx].trim().to_lowercase();
-        let rhs = expr[idx + 1..].trim();
-        let rhs_tree = match parse_expr(rhs) {
-            Ok(t) => t,
-            Err(_) => return Vec::new(),
-        };
-        let lhs_tree = match parse_expr(&lhs) {
-            Ok(t) => t,
-            Err(_) => return Vec::new(),
-        };
-        let f = |x: f64, y: f64| rhs_tree.eval(x, y) - lhs_tree.eval(x, y);
+) -> Vec<Vec<f64>> {
+    let symbols = build_symbols(&lines);
 
-        // Marching squares / zero-crossing grid sampling for implicit f(x,y)=0
-        let step = 4;
-        let mut out: Vec<f64> = Vec::new();
-        for py in (0..height as usize).step_by(step) {
-            for px in (0..width as usize).step_by(step) {
-                let x = (px as f64 - offset_x) / scale;
-                let y = (offset_y - py as f64) / scale;
-                let v = f(x, y);
-                if v.is_finite() && v.abs() < 0.2 {
-                    out.push(px as f64);
-                    out.push(py as f64);
-                } else {
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                }
-            }
+    let mut all_paths = Vec::with_capacity(lines.len());
+
+    for line in &lines {
+        let trimmed = line.trim();
+        let mut path_points: Vec<f64> = Vec::new();
+
+        if trimmed.is_empty() {
+            all_paths.push(path_points);
+            continue;
         }
-        return out;
-    }
 
-    let mut clean = expr;
-    let mut is_x_eq = false;
-
-    if clean.starts_with("x=") || clean.starts_with("X=") {
-        is_x_eq = true;
-        clean = &clean[2..];
-    } else if clean.starts_with("y=") || clean.starts_with("Y=") {
-        clean = &clean[2..];
-    }
-
-    let tree = match parse_expr(clean) {
-        Ok(t) => t,
-        Err(_) => return Vec::new(),
-    };
-
-    let width_f = width as f64;
-    let height_f = height as f64;
-    let mut out: Vec<f64> = Vec::new();
-
-    if is_x_eq {
-        let mut py = 0.0_f64;
-        while py <= height_f {
-            let y = (offset_y - py) / scale;
-            let x = tree.eval(0.0, y);
-            if x.is_finite() {
-                let px = offset_x + x * scale;
-                if px.is_finite() && px >= -width_f * 2.0 && px <= width_f * 3.0 {
-                    out.push(px);
-                    out.push(py);
-                } else {
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                }
-            } else {
-                out.push(f64::NAN);
-                out.push(f64::NAN);
-            }
-            py += 1.0;
+        let axis = strip_axis_prefix(trimmed);
+        let is_assignment =
+            axis.is_none() && trimmed.contains('=') && parse_assignment(trimmed).is_ok();
+        if is_assignment {
+            all_paths.push(path_points);
+            continue;
         }
-    } else {
-        let mut px = 0.0_f64;
-        let mut prev: Option<(f64, f64)> = None;
-        while px <= width_f {
-            let x = (px - offset_x) / scale;
-            let y = tree.eval(x, 0.0);
-            if y.is_finite() {
-                let is_pole = match prev {
-                    Some((xp, yp)) if yp * y < 0.0 => {
-                        let ym = tree.eval((xp + x) * 0.5, 0.0);
-                        !ym.is_finite() || ym.abs() >= yp.abs().max(y.abs())
+
+        if axis.is_none() && trimmed.contains('=') {
+            let parts: Vec<&str> = trimmed.splitn(2, '=').collect();
+            if parts.len() == 2 {
+                if let (Ok(lhs), Ok(rhs)) =
+                    (parse_expr(parts[0].trim()), parse_expr(parts[1].trim()))
+                {
+                    let step = 4_usize;
+                    for py in (0..height as usize).step_by(step) {
+                        for px in (0..width as usize).step_by(step) {
+                            let x = (px as f64 - offset_x) / scale;
+                            let y = (offset_y - py as f64) / scale;
+                            let lhs_val =
+                                lhs.eval_with_symbols_rec(x, y, &symbols, &mut HashSet::new());
+                            let rhs_val =
+                                rhs.eval_with_symbols_rec(x, y, &symbols, &mut HashSet::new());
+                            let v = rhs_val - lhs_val;
+                            if v.is_finite() && v.abs() < 0.2 {
+                                path_points.extend([px as f64, py as f64]);
+                            } else {
+                                path_points.extend([f64::NAN, f64::NAN]);
+                            }
+                        }
                     }
-                    _ => false,
-                };
-                if is_pole {
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                    prev = Some((x, y));
-                    px += 1.5;
-                    continue;
                 }
-                let py = offset_y - y * scale;
-                if py.is_finite() && py > -height_f * 4.0 && py < height_f * 5.0 {
-                    out.push(px);
-                    out.push(py);
-                } else {
-                    out.push(f64::NAN);
-                    out.push(f64::NAN);
-                }
-                prev = Some((x, y));
-            } else {
-                out.push(f64::NAN);
-                out.push(f64::NAN);
-                prev = None;
             }
-            px += 1.5;
+            all_paths.push(path_points);
+            continue;
         }
+
+        let (is_x_eq, expr_to_parse) = match axis {
+            Some((is_x, rhs)) => (is_x, rhs.to_string()),
+            None => (false, trimmed.to_string()),
+        };
+
+        if let Ok(tree) = parse_expr(&expr_to_parse) {
+            if is_x_eq {
+                for py in 0..=height {
+                    let y = (offset_y - py as f64) / scale;
+                    let x = tree.eval_with_symbols_rec(f64::NAN, y, &symbols, &mut HashSet::new());
+                    if x.is_finite() {
+                        path_points.extend([offset_x + x * scale, py as f64]);
+                    } else {
+                        path_points.extend([f64::NAN, f64::NAN]);
+                    }
+                }
+            } else {
+                let mut prev: Option<f64> = None;
+                for px in (0..=width).step_by(2) {
+                    let x = (px as f64 - offset_x) / scale;
+                    let y = tree.eval_with_symbols_rec(x, f64::NAN, &symbols, &mut HashSet::new());
+                    if y.is_finite() {
+                        if let Some(p) = prev {
+                            if p.signum() != y.signum() && y.abs() > 1e6 {
+                                path_points.extend([f64::NAN, f64::NAN, f64::NAN, f64::NAN]);
+                            }
+                        }
+                        path_points.extend([px as f64, offset_y - y * scale]);
+                        prev = Some(y);
+                    } else {
+                        path_points.extend([f64::NAN, f64::NAN]);
+                        prev = None;
+                    }
+                }
+            }
+        }
+        all_paths.push(path_points);
     }
-    out
+    all_paths
 }

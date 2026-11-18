@@ -13,6 +13,9 @@ export interface Assignment {
 export function parseAssignment(line: string): Assignment | null {
   const m = line.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+)\s*$/);
   if (!m) return null;
+  const name = m[1].toLowerCase();
+  if (name === 'x' || name === 'y') return null;
+  if (line.includes('(') && line.indexOf('(') < line.indexOf('=')) return null;
   return { name: m[1], rhs: m[2] };
 }
 

@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { sampleToPath, generateGridLines } from "../utils/math";
-  import { substituteSymbols } from "../utils/symbols";
+  import { sampleAllToPaths, generateGridLines } from "../utils/math";
   import type { ExpressionLine } from "../types.ts";
 
   let {
     expressions,
-    symbols = {},
     scale,
     offsetX,
     offsetY,
@@ -13,13 +11,21 @@
     darkMode,
   }: {
     expressions: ExpressionLine[];
-    symbols?: Record<string, number>;
     scale: number;
     offsetX: number;
     offsetY: number;
     showGrid: boolean;
     darkMode: boolean;
   } = $props();
+
+  let sampledPaths = $derived(
+    sampleAllToPaths(
+      expressions.map((e) => e.expression),
+      scale,
+      offsetX,
+      offsetY,
+    ),
+  );
 </script>
 
 <svg class="graph-canvas" viewBox="0 0 800 600" data-dark={darkMode}>
@@ -71,9 +77,13 @@
   <line x1={offsetX} y1="0" x2={offsetX} y2="600" class="axis" />
 
   {#each expressions as expr, i (i)}
-    {@const d = sampleToPath(expr.expression, scale, offsetX, offsetY)}
-    {#if d}
-      <path {d} fill="none" stroke={expr.color} stroke-width="2.5" />
+    {#if sampledPaths[i] && expr.expression.trim()}
+      <path
+        d={sampledPaths[i]}
+        fill="none"
+        stroke={expr.color}
+        stroke-width="2.5"
+      />
     {/if}
   {/each}
 </svg>

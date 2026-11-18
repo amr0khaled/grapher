@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:rs": "bash -c \"cd engine && wasm-pack build --target web --out-dir ../src/wasm\"",
     "preview": "vite preview",
     "check": "svelte-check"
   },

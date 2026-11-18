@@ -12,3 +12,12 @@ fn test_parse_invalid_assignment() {
     assert!(grapher_engine::parser::parse_assignment("ab = 3").is_err());
     assert!(grapher_engine::parser::parse_assignment(" = 3").is_err());
 }
+
+#[test]
+fn test_parse_assignment_ignores_rhs_symbol_resolution() {
+    // Parsing must succeed for "y = a * x" even without knowing 'a'
+    let res = grapher_engine::parser::parse_assignment("y = a * x");
+    assert!(res.is_ok());
+    let (name, _node) = res.unwrap();
+    assert_eq!(name, 'y');
+}

@@ -3,8 +3,8 @@
   import Sidebar from "./layouts/Sidebar.svelte";
   import GraphCanvas from "./components/GraphCanvas.svelte";
   import SettingsCard from "./components/SettingsCard.svelte";
+  import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
-  import { evalAssignments } from "./utils/symbols";
   import type { ExpressionLine } from "./types.ts";
 
   let expressions = $state<ExpressionLine[]>([
@@ -13,13 +13,10 @@
   ]);
 
   // Symbol table derived from assignment lines (top-down evaluation).
-  let symbols = $derived.by(() => {
-    const lines = expressions.map((e) => e.expression);
-    return evalAssignments(lines).symbols;
-  });
+  let symbols: Record<string, number> = {};
 
   // --- View state ---
-  let scale = $state(1);
+  let scale = $state(100);
   let offsetX = $state(400);
   let offsetY = $state(300);
   let showGrid = $state(true);
@@ -149,13 +146,24 @@
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
   });
 
-  onMount(() => {
-    engineReady = true;
+  onMount(async () => {
+    try {
+      await initEngine();
+      engineReady = true;
+    } catch (e) {
+      console.error("WASM engine failed to load", e);
+    }
   });
 </script>
 
 <div class="grapher-layout" class:dark={darkMode}>
-  <Sidebar {expressions} {addLine} {removeLine} {updateExpression} {updateColor} {symbols}
+  <Sidebar
+    {expressions}
+    {addLine}
+    {removeLine}
+    {updateExpression}
+    {updateColor}
+    {symbols}
   ></Sidebar>
 
   <main
@@ -172,7 +180,6 @@
     {#if engineReady}
       <GraphCanvas
         {expressions}
-        {symbols}
         {scale}
         {offsetX}
         {offsetY}
@@ -180,7 +187,7 @@
         {darkMode}
       />
     {:else}
-      <div class="loading">Loading engine…</div>
+      <div class="loading">Loading Engine…</div>
     {/if}
     <div class="zoom-controls">
       <button
