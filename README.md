@@ -1,27 +1,19 @@
 # Grapher
 
-High-performance, natively cross-platform Desmos alternative with advanced mathematical capabilities and signal processing operations.
+**Stop waiting for your browser to compute math.**
 
-## Mission
-Create a blazing-fast graphing calculator surpassing web-only alternatives through a Rust WebAssembly (WASM) math engine and modern Svelte 5 frontend, designed for seamless cross-platform execution (Web and Desktop via Tauri).
+Grapher is a high-performance, natively cross-platform graphing engine designed to replace clunky web calculators with raw Rust speed. Whether you're mapping functions or performing real-time signal analysis, Grapher gets out of your way.
 
-## Specification (Nutshell)
-- **Frontend:** Svelte 5 runes, Vite, MathLive `<math-field>` equation editor with LaTeX rendering.
-- **Math Engine:** Rust (`wasm-bindgen`, `wasm-pack`) using zero-serde fast FFI with flat `Float64Array` buffers.
-- **Evaluation & Symbols:** Recursive-descent parser supporting assignments (`m = 5`), reactive dependent expressions (`n = m/2`), and implicit function sampling.
-- **Grid & View:** Adaptive 1/2/5 nice-number grid generation with anti-flash density thresholds and zoom stabilization.
+---
 
-## Current Features
-- Sidebar equation list with live LaTeX rendering and dynamic line addition/removal.
-- Rust-powered variable and symbol table resolution (`F = 1/T`, `y = F^x`).
-- Index-aligned batch expression sampling.
-- Smooth pan, mouse wheel zoom, touch pinch-zoom, and auto-centering.
-- Light and dark mode support.
-- Stable adaptive grid rendering with clean integer and nice-step labels.
+## ⚡ The Stack
+* **Engine:** Pure Rust compiled to WASM. Batch processing, zero-serialization FFI, native symbol resolution.
+* **Interface:** Svelte 5 (Runes) + MathLive. LaTeX input that actually feels snappy.
+* **Adaptive UX:** Infinite zoom with stable, flicker-free grids using nice-number dynamic scaling.
 
-## Planned Features & Roadmap
-- Signal processing operations (Fourier transforms, filtering, convolution, impulse responses).
-- Implicit function graphing ($f(x,y)=0$ via marching squares).
-- Complex numbers and vector/matrix operations.
-- Sliders, tables, animations, and regression analysis.
-- Full Tauri desktop shell integration.
+## 🛠 Capabilities
+* **Current:** 2D function plotting, real-time symbol table evaluation (`F = 1/T`, `y = F^x`), buttery pan/zoom, implicit function sampling.
+* **Roadmap:** Signal processing operations (Fourier transforms, convolution, impulse responses), complex matrix algebra, desktop integration via Tauri.
+
+## 🚀 Vision: Beyond Basic Plotting
+Standard graphing tools fall apart when you need to *process* data. We are building the next-gen environment for mathematical exploration and signal analysis.
