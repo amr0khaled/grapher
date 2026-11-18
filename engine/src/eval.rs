@@ -70,26 +70,34 @@ impl Node {
                 if d == 0.0 { f64::NAN } else { a.eval_with_symbols_rec(x, y, st, visited) / d }
             }
             Node::Pow(a, b) => a.eval_with_symbols_rec(x, y, st, visited).powf(b.eval_with_symbols_rec(x, y, st, visited)),
-            Node::Fn(name, a) => {
+            Node::Fn(name, args) => {
                 let name_char = name.chars().next().unwrap_or(' ');
-                if let Some((args, body)) = st.funcs.get(&name_char) {
-                    let arg_val = a.eval_with_symbols_rec(x, y, st, visited);
-                    if args[0] == 'x' {
-                        return body.eval_with_symbols_rec(arg_val, y, st, visited);
-                    }
-                    if args[0] == 'y' {
-                        return body.eval_with_symbols_rec(x, arg_val, st, visited);
-                    }
+                if let Some((f_args, body)) = st.funcs.get(&name_char) {
+                    let arg_vals: Vec<f64> = args
+                        .iter()
+                        .map(|a| a.eval_with_symbols_rec(x, y, st, visited))
+                        .collect();
+                    // Params named 'x'/'y' bind to body's positional vars; others via symbol table.
+                    let mut body_x = x;
+                    let mut body_y = y;
                     let mut sub_st = st.clone();
-                    sub_st.set_expr(args[0], Node::Num(arg_val));
-                    return body.eval_with_symbols_rec(x, y, &sub_st, visited);
+                    for (i, (f_arg, val)) in f_args.iter().zip(arg_vals.iter()).enumerate() {
+                        if *f_arg == 'x' {
+                            body_x = *val;
+                        } else if *f_arg == 'y' {
+                            body_y = *val;
+                        } else {
+                            sub_st.set_expr(*f_arg, Node::Num(*val));
+                        }
+                    }
+                    return body.eval_with_symbols_rec(body_x, body_y, &sub_st, visited);
                 }
-                let v = a.eval_with_symbols_rec(x, y, st, visited);
+                let arg_vals: Vec<f64> = args.iter().map(|a| a.eval_with_symbols_rec(x, y, st, visited)).collect();
                 match name.as_str() {
-                    "sin" => v.sin(),
-                    "cos" => v.cos(),
-                    "tan" => v.tan(),
-                    "sqrt" => if v < 0.0 { f64::NAN } else { v.sqrt() },
+                    "sin" if arg_vals.len() == 1 => arg_vals[0].sin(),
+                    "cos" if arg_vals.len() == 1 => arg_vals[0].cos(),
+                    "tan" if arg_vals.len() == 1 => arg_vals[0].tan(),
+                    "sqrt" if arg_vals.len() == 1 => if arg_vals[0] < 0.0 { f64::NAN } else { arg_vals[0].sqrt() },
                     _ => f64::NAN,
                 }
             }

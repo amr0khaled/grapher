@@ -12,6 +12,7 @@ pub(crate) enum Tok {
     Op(char),
     LParen,
     RParen,
+    Comma,
 }
 
 pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
@@ -75,6 +76,9 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             i += 1;
         } else if c == b')' {
             out.push(Tok::RParen);
+            i += 1;
+        } else if c == b',' {
+            out.push(Tok::Comma);
             i += 1;
         } else {
             return Err(format!("bad char: {}", c as char));
@@ -176,12 +180,26 @@ impl Parser {
                     Some(Tok::LParen) => {}
                     _ => return Err(format!("expected ( after fn {}", name)),
                 }
-                let arg = self.parse_expr()?;
-                match self.bump() {
-                    Some(Tok::RParen) => {}
-                    _ => return Err(format!("expected ) after fn {}", name)),
+                let mut args = Vec::new();
+                if let Some(Tok::RParen) = self.peek() {
+                    return Err(format!("expected argument for fn {}", name));
                 }
-                Ok(Node::Fn(name, Box::new(arg)))
+                {
+                    loop {
+                        args.push(self.parse_expr()?);
+                        match self.peek() {
+                            Some(Tok::Comma) => {
+                                self.bump();
+                            }
+                            Some(Tok::RParen) => {
+                                self.bump();
+                                break;
+                            }
+                            _ => return Err(format!("expected , or ) in fn {}", name)),
+                        }
+                    }
+                }
+                Ok(Node::Fn(name, args))
             }
             Some(Tok::LParen) => {
                 let inner = self.parse_expr()?;
@@ -207,7 +225,7 @@ pub enum Node {
     Mul(Box<Node>, Box<Node>),
     Div(Box<Node>, Box<Node>),
     Pow(Box<Node>, Box<Node>),
-    Fn(String, Box<Node>),
+    Fn(String, Vec<Node>),
 }
 
 pub fn parse_expr(s: &str) -> Result<Node, String> {
