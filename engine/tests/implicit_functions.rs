@@ -71,4 +71,21 @@ mod tests {
         }
         panic!("no finite point at px=10; got path {:?}", path);
     }
+
+    #[test]
+    fn test_user_defined_function_sampling() {
+        let result = grapher_engine::sampling::sample(
+            vec![
+                "g(x) = x^2".to_string(),
+                "y = g(x)".to_string(),
+            ],
+            1.0,
+            0.0,
+            0.0,
+            100,
+            100,
+        );
+        assert_eq!(result.len(), 2);
+        assert!(!result[1].is_empty());
+    }
 }

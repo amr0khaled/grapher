@@ -2,6 +2,21 @@
 //! Population: extend match arms; unknown name / wrong arity returns None (eval maps to NaN).
 //! Signal transform builtins live in transforms.rs.
 
+pub(crate) fn is_one_arg(name: &str) -> bool {
+    matches!(
+        name,
+        "sin" | "cos" | "tan"
+            | "asin" | "acos" | "atan"
+            | "sinh" | "cosh" | "tanh"
+            | "asinh" | "acosh" | "atanh"
+            | "sqrt" | "cbrt"
+            | "ln" | "log2" | "log10"
+            | "exp"
+            | "abs" | "sign" | "floor" | "ceil" | "round"
+            | "heaviside" | "step" | "rect" | "tri" | "sinc" | "imp"
+    )
+}
+
 // Arity-checked scalar builtins for one or more f64 args.
 // Returns None on wrong arity or undefined operation (ln of negative, etc.).
 pub(crate) fn eval_scalar(name: &str, args: &[f64]) -> Option<f64> {

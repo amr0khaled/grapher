@@ -28,6 +28,8 @@ fn build_symbols(lines: &[String]) -> SymbolTable {
         }
         if let Ok((name, node)) = parse_assignment(trimmed) {
             symbols.set_expr(name, node);
+        } else if let Ok((name_c, arg_c, body)) = crate::parser::parse_function_definition(trimmed) {
+            symbols.set_func(name_c, vec![arg_c], body);
         }
     }
     symbols
@@ -108,18 +110,24 @@ pub fn sample(
                     }
                 }
             } else {
-                let mut prev: Option<f64> = None;
-                for px in (0..=width).step_by(2) {
-                    let x = (px as f64 - offset_x) / scale;
+                // oversample 4x so dense/oscillating curves survive zoom-out;
+                // SVG keeps sub-pixel coordinates, so precision is real
+                let os = 4_usize;
+                let mut prev: Option<(f64, f64)> = None;
+                for i in 0..=(width as usize * os) {
+                    let px = i as f64 / os as f64;
+                    let x = (px - offset_x) / scale;
                     let y = tree.eval_with_symbols_rec(x, f64::NAN, &symbols, &mut HashSet::new());
                     if y.is_finite() {
-                        if let Some(p) = prev {
-                            if p.signum() != y.signum() && y.abs() > 1e6 {
-                                path_points.extend([f64::NAN, f64::NAN, f64::NAN, f64::NAN]);
+                        let py = offset_y - y * scale;
+                        if let Some((_, prev_py)) = prev {
+                            // jumped across an asymptote (or aliased pole) — break the path
+                            if (py - prev_py).abs() > 4.0 * height as f64 {
+                                path_points.extend([f64::NAN, f64::NAN]);
                             }
                         }
-                        path_points.extend([px as f64, offset_y - y * scale]);
-                        prev = Some(y);
+                        path_points.extend([px, py]);
+                        prev = Some((px, py));
                     } else {
                         path_points.extend([f64::NAN, f64::NAN]);
                         prev = None;

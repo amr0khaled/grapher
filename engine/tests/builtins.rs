@@ -1,6 +1,56 @@
 use grapher_engine::eval::eval_expr;
 
 #[test]
+fn test_implicit_one_arg_fn() {
+    assert_eq!(eval_expr("sin 0", 0.0, 0.0), 0.0);
+    assert_eq!(eval_expr("sin x", std::f64::consts::FRAC_PI_2, 0.0), 1.0);
+    assert_eq!(eval_expr("cos x + 1", 0.0, 0.0), 2.0); // cos(x)+1, not cos(x+1)
+    assert_eq!(eval_expr("sin x^2", (std::f64::consts::FRAC_PI_2).sqrt(), 0.0), 1.0); // sin(x^2)
+    assert_eq!(eval_expr("sqrt 9", 0.0, 0.0), 3.0);
+    assert_eq!(eval_expr("exp 0", 0.0, 0.0), 1.0);
+    assert_eq!(eval_expr("abs -5", 0.0, 0.0), 5.0); // abs binds unary minus
+
+    // Parity: explicit parens vs implicit argument must match for all one-arg builtins
+    for (explicit, implicit) in [
+        ("sin(1.25)", "sin 1.25"),
+        ("cos(1.25)", "cos 1.25"),
+        ("tan(1.25)", "tan 1.25"),
+        ("asin(0.5)", "asin 0.5"),
+        ("acos(0.5)", "acos 0.5"),
+        ("atan(1.25)", "atan 1.25"),
+        ("sinh(1.25)", "sinh 1.25"),
+        ("cosh(1.25)", "cosh 1.25"),
+        ("tanh(1.25)", "tanh 1.25"),
+        ("asinh(1.25)", "asinh 1.25"),
+        ("acosh(2)", "acosh 2"),
+        ("atanh(0.5)", "atanh 0.5"),
+        ("sqrt(2)", "sqrt 2"),
+        ("cbrt(2)", "cbrt 2"),
+        ("ln(2)", "ln 2"),
+        ("log2(8)", "log2 8"),
+        ("log10(100)", "log10 100"),
+        ("exp(1.25)", "exp 1.25"),
+        ("abs(-1.25)", "abs -1.25"),
+        ("sign(-1.25)", "sign -1.25"),
+        ("floor(1.25)", "floor 1.25"),
+        ("ceil(1.25)", "ceil 1.25"),
+        ("round(1.25)", "round 1.25"),
+        ("heaviside(-1)", "heaviside -1"),
+        ("step(0)", "step 0"),
+        ("rect(0.25)", "rect 0.25"),
+        ("tri(0.25)", "tri 0.25"),
+        ("sinc(1.25)", "sinc 1.25"),
+        ("imp(0)", "imp 0"),
+    ] {
+        assert_eq!(
+            eval_expr(explicit, 0.0, 0.0),
+            eval_expr(implicit, 0.0, 0.0),
+            "parity mismatch: {explicit} vs {implicit}"
+        );
+    }
+}
+
+#[test]
 fn test_builtins_trig_and_inverse() {
     assert_eq!(eval_expr("sin(0)", 0.0, 0.0), 0.0);
     assert_eq!(eval_expr("cos(0)", 0.0, 0.0), 1.0);
@@ -88,8 +138,8 @@ fn test_convolution() {
     use grapher_engine::parser::parse_expr;
 
     let mut st = SymbolTable::new();
-    st.set_func('r', vec!['x'], parse_expr("rect(x)").unwrap());
-    st.set_func('d', vec!['x'], parse_expr("imp(x)").unwrap());
+    st.set_func('r'.to_string(), vec!['x'.to_string()], parse_expr("rect(x)").unwrap());
+    st.set_func('d'.to_string(), vec!['x'.to_string()], parse_expr("imp(x)").unwrap());
 
     // (rect * rect)(0) should be ~1.0
     let val = parse_expr("conv(r, r, 0)").unwrap().eval_with_symbols(0.0, 0.0, &st);

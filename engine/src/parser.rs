@@ -11,7 +11,7 @@ pub(crate) enum Tok {
     Num(f64),
     VarX,
     VarY,
-    Var(char),
+    Var(String),
     Fn(String),
     Op(char),
     LParen,
@@ -55,10 +55,14 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             for name in DIGIT_BUILTINS {
                 let nb = name.as_bytes();
                 if b.len() - i >= nb.len() && b[i..i + nb.len()].eq_ignore_ascii_case(nb) {
-                    // require followed by '(' (possibly with whitespace)
-                    let mut j = i + nb.len();
+                    let end = i + nb.len();
+                    // require word boundary after digit-bearing builtin name
+                    if end < b.len() && (b[end].is_ascii_alphanumeric() || b[end] == b'_') {
+                        continue;
+                    }
+                    let mut j = end;
                     while j < b.len() && b[j].is_ascii_whitespace() { j += 1; }
-                    if j < b.len() && b[j] == b'(' {
+                    if (j < b.len() && b[j] == b'(') || crate::builtins::is_one_arg(name) {
                         matched = Some(*name);
                         break;
                     }
@@ -75,6 +79,16 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
             }
+            // optional _subscript: word or word_digits (e.g. x_2, a_t) -> one symbol
+            if i < b.len() && b[i] == b'_'
+                && i + 1 < b.len()
+                && (b[i + 1].is_ascii_alphanumeric() || b[i + 1] == b'_')
+            {
+                i += 1;
+                while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+                    i += 1;
+                }
+            }
             let word = std::str::from_utf8(&b[start..i]).unwrap();
             match word {
                 "x" | "X" => out.push(Tok::VarX),
@@ -86,10 +100,10 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                     while j < b.len() && b[j].is_ascii_whitespace() {
                         j += 1;
                     }
-                    if j < b.len() && b[j] == b'(' {
+                    if (j < b.len() && b[j] == b'(') || crate::builtins::is_one_arg(word) {
                         out.push(Tok::Fn(word.to_string()));
                     } else {
-                        word.chars().for_each(|e| out.push(Tok::Var(e)));
+                        out.push(Tok::Var(word.to_string()));
                     }
                 }
             }
@@ -201,15 +215,12 @@ impl Parser {
             Some(Tok::VarY) => Ok(Node::VarY),
             Some(Tok::Var(c)) => Ok(Node::Var(c)),
             Some(Tok::Fn(name)) => {
-                match self.bump() {
-                    Some(Tok::LParen) => {}
-                    _ => return Err(format!("expected ( after fn {}", name)),
-                }
-                let mut args = Vec::new();
-                if let Some(Tok::RParen) = self.peek() {
-                    return Err(format!("expected argument for fn {}", name));
-                }
-                {
+                if let Some(Tok::LParen) = self.peek() {
+                    self.bump();
+                    let mut args = Vec::new();
+                    if let Some(Tok::RParen) = self.peek() {
+                        return Err(format!("expected argument for fn {}", name));
+                    }
                     loop {
                         args.push(self.parse_expr()?);
                         match self.peek() {
@@ -223,8 +234,11 @@ impl Parser {
                             _ => return Err(format!("expected , or ) in fn {}", name)),
                         }
                     }
+                    Ok(Node::Fn(name, args))
+                } else {
+                    let arg = self.parse_factor()?;
+                    Ok(Node::Fn(name, vec![arg]))
                 }
-                Ok(Node::Fn(name, args))
             }
             Some(Tok::LParen) => {
                 let inner = self.parse_expr()?;
@@ -243,7 +257,7 @@ pub enum Node {
     Num(f64),
     VarX,
     VarY,
-    Var(char),
+    Var(String),
     Neg(Box<Node>),
     Add(Box<Node>, Box<Node>),
     Sub(Box<Node>, Box<Node>),
@@ -264,7 +278,7 @@ pub fn parse_expr(s: &str) -> Result<Node, String> {
     Ok(tree)
 }
 
-pub fn parse_function_definition(s: &str) -> Result<(char, char, Node), String> {
+pub fn parse_function_definition(s: &str) -> Result<(String, String, Node), String> {
     let parts: Vec<&str> = s.split('=').collect();
     if parts.len() != 2 {
         return Err("invalid function definition".to_string());
@@ -274,34 +288,43 @@ pub fn parse_function_definition(s: &str) -> Result<(char, char, Node), String> 
     let open = inner.find('(').ok_or("expected (")?;
     let name = inner[..open].trim();
     let arg = inner[open + 1..].trim();
-    if name.chars().count() != 1 {
-        return Err("function name must be one char".to_string());
+    if name.is_empty() {
+        return Err("function name must not be empty".to_string());
     }
-    if arg.chars().count() != 1 {
-        return Err("function arg must be one char".to_string());
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err("function name must be alphanumeric".to_string());
     }
-    let name_c = name.chars().next().unwrap();
-    if !name_c.is_ascii_alphabetic() {
-        return Err("function name must be a letter".to_string());
+    if arg.is_empty() {
+        return Err("function arg must not be empty".to_string());
     }
-    let arg_c = arg.chars().next().unwrap();
-    if !arg_c.is_ascii_alphabetic() {
-        return Err("function arg must be a letter".to_string());
+    if !arg
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err("function arg must be alphanumeric".to_string());
     }
     let body = parse_expr(parts[1])?;
-    Ok((name_c, arg_c, body))
+    Ok((name.to_string(), arg.to_string(), body))
 }
 
-pub fn parse_assignment(s: &str) -> Result<(char, Node), String> {
+pub fn parse_assignment(s: &str) -> Result<(String, Node), String> {
     let parts: Vec<&str> = s.split('=').collect();
     if parts.len() != 2 {
         return Err("invalid assignment".to_string());
     }
     let name = parts[0].trim();
-    if name.len() != 1 {
+    if name.is_empty() {
         return Err("invalid symbol name".to_string());
     }
-    let c = name.chars().next().unwrap();
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return Err("symbol name must be alphanumeric (or _)".to_string());
+    }
     let node = parse_expr(parts[1])?;
-    Ok((c, node))
+    Ok((name.to_string(), node))
 }

@@ -6,17 +6,17 @@ use crate::parser::Node;
 
 /// Evaluate a function or expression given by name or node, or fallback.
 /// If `f_node` is provided or function exists in st, or we evaluate an expression.
-pub(crate) fn eval_f_at(st: &SymbolTable, f_node: Option<&Node>, f_name: Option<char>, x: f64) -> f64 {
+pub(crate) fn eval_f_at(st: &SymbolTable, f_node: Option<&Node>, f_name: Option<&String>, x: f64) -> f64 {
     if let Some(node) = f_node {
         node.eval_with_symbols(x, 0.0, st)
     } else if let Some(name) = f_name {
-        if let Some((args, body)) = st.lookup_func(name) {
+        if let Some((args, body)) = st.lookup_func(&name) {
             if args.len() == 1 {
                 let mut sub = st.clone();
-                let f_arg = args[0];
-                if f_arg == 'x' {
+                let f_arg = args[0].clone();
+                if f_arg == "x" {
                     body.eval_with_symbols(x, 0.0, &sub)
-                } else if f_arg == 'y' {
+                } else if f_arg == "y" {
                     body.eval_with_symbols(0.0, x, &sub)
                 } else {
                     sub.set_expr(f_arg, Node::Num(x));
@@ -26,24 +26,18 @@ pub(crate) fn eval_f_at(st: &SymbolTable, f_node: Option<&Node>, f_name: Option<
                 f64::NAN
             }
         } else {
-            st.eval_symbol(name, x, 0.0)
+            st.eval_symbol(name.clone(), x, 0.0)
         }
     } else {
         f64::NAN
     }
 }
 
-/// Helper to parse first argument as a function name (char) or node.
-fn parse_f_arg(arg: &Node) -> (Option<char>, Option<Node>) {
+/// Helper to parse first argument as a function name or node.
+fn parse_f_arg(arg: &Node) -> (Option<String>, Option<Node>) {
     match arg {
-        Node::Var(c) => (Some(*c), None),
-        Node::Fn(name, subargs) if subargs.is_empty() => {
-            if let Some(c) = name.chars().next() {
-                (Some(c), None)
-            } else {
-                (None, Some(arg.clone()))
-            }
-        }
+        Node::Var(c) => (Some(c.clone()), None),
+        Node::Fn(name, subargs) if subargs.is_empty() => (Some(name.clone()), None),
         _ => (None, Some(arg.clone())),
     }
 }
@@ -63,7 +57,7 @@ pub(crate) fn ctftre(st: &SymbolTable, args: &[Node]) -> f64 {
 
     for i in 0..=n {
         let t = -t_bound + (i as f64) * dt;
-        let val = eval_f_at(st, f_node.as_ref(), f_name, t);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), t);
         if !val.is_finite() { continue; }
         let weight = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
         sum += weight * val * (omega * t).cos();
@@ -85,7 +79,7 @@ pub(crate) fn ctftim(st: &SymbolTable, args: &[Node]) -> f64 {
 
     for i in 0..=n {
         let t = -t_bound + (i as f64) * dt;
-        let val = eval_f_at(st, f_node.as_ref(), f_name, t);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), t);
         if !val.is_finite() { continue; }
         let weight = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
         sum += weight * val * (-omega * t).sin();
@@ -111,7 +105,7 @@ pub(crate) fn dtftre(st: &SymbolTable, args: &[Node]) -> f64 {
     let mut sum = 0.0;
     for k in 0..n {
         let t = k as f64;
-        let val = eval_f_at(st, f_node.as_ref(), f_name, t);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), t);
         if val.is_finite() {
             sum += val * (omega * t).cos();
         }
@@ -128,7 +122,7 @@ pub(crate) fn dtftim(st: &SymbolTable, args: &[Node]) -> f64 {
     let mut sum = 0.0;
     for k in 0..n {
         let t = k as f64;
-        let val = eval_f_at(st, f_node.as_ref(), f_name, t);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), t);
         if val.is_finite() {
             sum += val * (-omega * t).sin();
         }
@@ -153,7 +147,7 @@ pub(crate) fn dftre(st: &SymbolTable, args: &[Node]) -> f64 {
 
     let mut sum = 0.0;
     for k in 0..n {
-        let val = eval_f_at(st, f_node.as_ref(), f_name, k as f64);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), k as f64);
         if val.is_finite() {
             let angle = -2.0 * std::f64::consts::PI * (m * (k as f64)) / (n as f64);
             sum += val * angle.cos();
@@ -171,7 +165,7 @@ pub(crate) fn dftim(st: &SymbolTable, args: &[Node]) -> f64 {
 
     let mut sum = 0.0;
     for k in 0..n {
-        let val = eval_f_at(st, f_node.as_ref(), f_name, k as f64);
+        let val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), k as f64);
         if val.is_finite() {
             let angle = -2.0 * std::f64::consts::PI * (m * (k as f64)) / (n as f64);
             sum += val * angle.sin();
@@ -200,8 +194,8 @@ pub(crate) fn conv(st: &SymbolTable, args: &[Node]) -> f64 {
 
     for i in 0..=n {
         let tau = -t_bound + (i as f64) * dt;
-        let f_val = eval_f_at(st, f_node.as_ref(), f_name, tau);
-        let g_val = eval_f_at(st, g_node.as_ref(), g_name, t - tau);
+        let f_val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), tau);
+        let g_val = eval_f_at(st, g_node.as_ref(), g_name.as_ref(), t - tau);
         if !f_val.is_finite() || !g_val.is_finite() { continue; }
         let weight = if i == 0 || i == n { 1.0 } else if i % 2 == 1 { 4.0 } else { 2.0 };
         sum += weight * f_val * g_val;
@@ -219,8 +213,8 @@ pub(crate) fn dtconv(st: &SymbolTable, args: &[Node]) -> f64 {
     let mut sum = 0.0;
     for m in -32..=32 {
         let tau = m as f64;
-        let f_val = eval_f_at(st, f_node.as_ref(), f_name, tau);
-        let g_val = eval_f_at(st, g_node.as_ref(), g_name, (n_val - m) as f64);
+        let f_val = eval_f_at(st, f_node.as_ref(), f_name.as_ref(), tau);
+        let g_val = eval_f_at(st, g_node.as_ref(), g_name.as_ref(), (n_val - m) as f64);
         if f_val.is_finite() && g_val.is_finite() {
             sum += f_val * g_val;
         }
