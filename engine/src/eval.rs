@@ -32,6 +32,9 @@ impl SymbolTable {
         }
         out
     }
+    fn lookup_func(&self, name: char) -> Option<(Vec<char>, Node)> {
+        self.funcs.get(&name).cloned()
+    }
     fn eval_rec(&self, name: char, x: f64, y: f64, visited: &mut HashSet<char>) -> f64 {
         if !visited.insert(name) { return f64::NAN; }
         let res = match self.exprs.get(&name) {
@@ -93,13 +96,7 @@ impl Node {
                     return body.eval_with_symbols_rec(body_x, body_y, &sub_st, visited);
                 }
                 let arg_vals: Vec<f64> = args.iter().map(|a| a.eval_with_symbols_rec(x, y, st, visited)).collect();
-                match name.as_str() {
-                    "sin" if arg_vals.len() == 1 => arg_vals[0].sin(),
-                    "cos" if arg_vals.len() == 1 => arg_vals[0].cos(),
-                    "tan" if arg_vals.len() == 1 => arg_vals[0].tan(),
-                    "sqrt" if arg_vals.len() == 1 => if arg_vals[0] < 0.0 { f64::NAN } else { arg_vals[0].sqrt() },
-                    _ => f64::NAN,
-                }
+                crate::builtins::eval_scalar(name.as_str(), &arg_vals).unwrap_or(f64::NAN)
             }
         }
     }

@@ -2,6 +2,7 @@ pub mod eval;
 pub mod parser;
 pub mod sampling;
 pub mod utils;
+pub mod builtins;
 
 pub use crate::eval::SymbolTable;
 pub use crate::parser::{parse_assignment, parse_expr, parse_function_definition};
