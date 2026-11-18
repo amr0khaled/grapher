@@ -17,8 +17,12 @@
 
   // --- View state ---
   let scale = $state(100);
-  let offsetX = $state(400);
-  let offsetY = $state(300);
+  const innerWidth = 800;
+  const innerHeight = 600;
+  const hWidth = innerWidth / 2;
+  const hHeight = innerHeight / 2;
+  let offsetX = $derived(hWidth);
+  let offsetY = $derived(hHeight);
   let showGrid = $state(true);
   let darkMode = $state(true);
   let showSettings = $state(false);
@@ -60,8 +64,8 @@
     const svg = document.querySelector(".graph-canvas");
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const mx = ((clientX - rect.left) / rect.width) * 800;
-    const my = ((clientY - rect.top) / rect.height) * 600;
+    const mx = ((clientX - rect.left) / rect.width) * innerWidth;
+    const my = ((clientY - rect.top) / rect.height) * innerHeight;
     const f = Math.pow(factor, ZOOM_ACCEL);
     const ns = clampScale(scale * f);
     const k = ns / scale;
@@ -128,7 +132,7 @@
   function onPointerMove(e: MouseEvent) {
     if (!isPanning) return;
     const svg = document.querySelector(".graph-canvas");
-    const ratio = svg ? 800 / svg.getBoundingClientRect().width : 1;
+    const ratio = svg ? innerWidth / svg.getBoundingClientRect().width : 1;
     offsetX = panStartOffset.x + (e.clientX - panStart.x) * ratio * PAN_ACCEL;
     offsetY = panStartOffset.y + (e.clientY - panStart.y) * ratio * PAN_ACCEL;
   }
@@ -138,8 +142,8 @@
 
   function resetView() {
     scale = 50;
-    offsetX = 400;
-    offsetY = 300;
+    offsetX = hWidth;
+    offsetY = hHeight;
   }
 
   $effect(() => {
@@ -183,6 +187,8 @@
         {scale}
         {offsetX}
         {offsetY}
+        {innerHeight}
+        {innerWidth}
         {showGrid}
         {darkMode}
       />
@@ -196,8 +202,10 @@
         title="Settings"
         aria-label="Toggle settings">⚙️</button
       >
-      <button onclick={() => zoomAtPoint(400, 300, ZOOM_BUTTON_STEP)}>+</button>
-      <button onclick={() => zoomAtPoint(400, 300, 1 / ZOOM_BUTTON_STEP)}
+      <button onclick={() => zoomAtPoint(hWidth, hHeight, ZOOM_BUTTON_STEP)}
+        >+</button
+      >
+      <button onclick={() => zoomAtPoint(hWidth, hHeight, 1 / ZOOM_BUTTON_STEP)}
         >-</button
       >
     </div>

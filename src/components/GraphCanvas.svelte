@@ -7,6 +7,8 @@
     scale,
     offsetX,
     offsetY,
+    innerWidth,
+    innerHeight,
     showGrid,
     darkMode,
   }: {
@@ -14,6 +16,8 @@
     scale: number;
     offsetX: number;
     offsetY: number;
+    innerHeight: number;
+    innerWidth: number;
     showGrid: boolean;
     darkMode: boolean;
   } = $props();
@@ -28,53 +32,83 @@
   );
 </script>
 
-<svg class="graph-canvas" viewBox="0 0 800 600" data-dark={darkMode}>
+<svg
+  class="graph-canvas"
+  width={outerWidth}
+  height={outerHeight}
+  viewBox={`0 0 ${innerWidth} ${innerHeight}`}
+  preserveAspectRatio="xMidYMid meet"
+  data-dark={darkMode}
+>
   {#if showGrid}
-    {#each generateGridLines(scale, offsetX, 800) as line (line.pos)}
+    {#each generateGridLines(scale, offsetX, innerWidth) as line (line.pos)}
       {#if line.isMajor}
         <g>
           <line
             x1={line.pos}
             y1="0"
             x2={line.pos}
-            y2="600"
+            y2={innerHeight}
             class="grid-major"
           />
           <text
             x={line.pos}
-            y={offsetY < 15 ? 15 : offsetY > 585 ? 585 : offsetY - 5}
+            y={offsetY < 15
+              ? 15
+              : offsetY > innerHeight - 15
+                ? innerHeight - 15
+                : offsetY - 5}
             class="axis-label"
+            font-size="50"
+            font-weight="900"
             text-anchor="middle">{line.label}</text
           >
         </g>
       {:else}
-        <line x1={line.pos} y1="0" x2={line.pos} y2="600" class="grid-minor" />
+        <line
+          x1={line.pos}
+          y1="0"
+          x2={line.pos}
+          y2={innerHeight}
+          class="grid-minor"
+        />
       {/if}
     {/each}
-    {#each generateGridLines(scale, offsetY, 600) as line (line.pos)}
+    {#each generateGridLines(scale, offsetY, innerHeight) as line (line.pos)}
       {#if line.isMajor}
         <g>
           <line
             x1="0"
             y1={line.pos}
-            x2="800"
+            x2={innerWidth}
             y2={line.pos}
             class="grid-major"
           />
           <text
-            x={offsetX < 25 ? 25 : offsetX > 775 ? 775 : offsetX + 5}
+            x={offsetX < 25
+              ? 25
+              : offsetX > innerWidth - 15
+                ? innerWidth - 15
+                : offsetX + 5}
             y={line.pos + 4}
             class="axis-label"
+            font-weight="900"
             dominant-baseline="middle">{-line.label}</text
           >
         </g>
       {:else}
-        <line x1="0" y1={line.pos} x2="800" y2={line.pos} class="grid-minor" />
+        <line
+          x1="0"
+          y1={line.pos}
+          x2={innerWidth}
+          y2={line.pos}
+          class="grid-minor"
+        />
       {/if}
     {/each}
   {/if}
-  <line x1="0" y1={offsetY} x2="800" y2={offsetY} class="axis" />
-  <line x1={offsetX} y1="0" x2={offsetX} y2="600" class="axis" />
+  <line x1="0" y1={offsetY} x2={innerWidth} y2={offsetY} class="axis" />
+  <line x1={offsetX} y1="0" x2={offsetX} y2={innerHeight} class="axis" />
 
   {#each expressions as expr, i (i)}
     {#if sampledPaths[i] && expr.expression.trim()}

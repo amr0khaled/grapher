@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "bun build:rs && vite build",
     "build:rs": "bash -c \"cd engine && wasm-pack build --target web --out-dir ../src/wasm\"",
     "preview": "vite preview",
     "check": "svelte-check"
@@ -17,7 +17,8 @@
     "svelte": "^5.57.3",
     "svelte-check": "^4.7.8",
     "typescript": "~6",
-    "vite": "^8.3.8"
+    "vite": "^8.3.8",
+    "vite-plugin-wasm-pack": "^0.1.12"
   },
   "dependencies": {
     "@types/katex": "^0.16.8",
