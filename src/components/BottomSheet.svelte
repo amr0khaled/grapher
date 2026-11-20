@@ -20,15 +20,16 @@
   let currentTranslateY = $state(0);
   let keyboardOffset = $state(0);
 
+  const SHEET_HEIGHT = 600; // fixed max sheet height px
+
   function getSnapTranslateY(snap: SnapPoint): number {
-    const h = window.innerHeight;
     switch (snap) {
       case "peek":
-        return h - 80;
+        return SHEET_HEIGHT - 72;
       case "half":
-        return h * 0.55;
+        return SHEET_HEIGHT * 0.45;
       case "full":
-        return 56;
+        return 0;
     }
   }
 
@@ -73,8 +74,8 @@
     const dy = e.clientY - dragStartY;
     totalDragDistance = Math.abs(dy);
     const targetY = dragStartTranslateY + dy;
-    const minY = 56; // full
-    const maxY = window.innerHeight - 80; // peek
+    const minY = 0; // full
+    const maxY = SHEET_HEIGHT - 72; // peek
     currentTranslateY = Math.max(minY, Math.min(maxY, targetY));
 
     const dt = e.timeStamp - lastTime;
@@ -90,20 +91,15 @@
     if (!dragging) return;
     dragging = false;
 
-    // If user tapped without dragging, let handleHandleClick handle it
-    if (totalDragDistance <= 6) {
-      return;
-    }
+    if (totalDragDistance <= 6) return;
 
     const VELOCITY_THRESHOLD = 0.5;
     let target: SnapPoint;
 
     if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
       if (velocity > 0) {
-        // swipe down
         target = activeSnap === "full" ? "half" : "peek";
       } else {
-        // swipe up
         target = activeSnap === "peek" ? "half" : "full";
       }
     } else {
@@ -157,6 +153,7 @@
   class="bottom-sheet"
   class:dragging
   class:peek-mode={activeSnap === "peek"}
+  style:height="{SHEET_HEIGHT}px"
   style:transform="translateY({computedTranslateY}px)"
   style:bottom="{keyboardOffset}px"
 >
@@ -179,10 +176,8 @@
 <style>
   .bottom-sheet {
     position: fixed;
-    top: 0;
     left: 0;
     right: 0;
-    height: 100dvh;
     z-index: 30;
     background: var(--panel);
     border-radius: 16px 16px 0 0;
