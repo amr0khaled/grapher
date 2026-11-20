@@ -12,38 +12,45 @@ try {
   console.error("WASM engine init failed", e);
 }
 
-// Build SVG path from one line's flat [px, py, ...] buffer; NaN pairs break segments.
-function pathFromFlat(flat: Float64Array): string {
-  let d = '';
-  let pen = false;
+// Build Path2D from one line's flat [px, py, ...] buffer; NaN pairs break segments.
+function buildPath2D(flat: Float64Array): Path2D | null {
+  if (!flat || flat.length < 2) return null;
+  const p = new Path2D();
+  let hasPoints = false;
+  let startedSubpath = false;
   for (let i = 0; i + 1 < flat.length; i += 2) {
     const x = flat[i];
     const y = flat[i + 1];
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      pen = false;
+      startedSubpath = false;
       continue;
     }
-    d += (pen ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2);
-    pen = true;
+    hasPoints = true;
+    if (!startedSubpath) {
+      p.moveTo(x, y);
+      startedSubpath = true;
+    } else {
+      p.lineTo(x, y);
+    }
   }
-  return d;
+  return hasPoints ? p : null;
 }
 
-// Sample all lines in one batch; returns index-aligned SVG path strings.
-export function sampleAllToPaths(
+// Sample all lines in one batch; returns index-aligned Path2D objects.
+export function sampleToPath2D(
   expressions: string[],
   scale: number,
   offsetX: number,
   offsetY: number,
-  width = 800,
-  height = 600,
-): string[] {
+  width: number,
+  height: number,
+): (Path2D | null)[] {
   const plain = expressions.map((e) => toPlainInfix(e));
   const arrays = sample(plain, scale, offsetX, offsetY, width, height) as unknown[];
-  const out: string[] = [];
+  const out: (Path2D | null)[] = [];
   for (let i = 0; i < arrays.length; i++) {
     const flat = arrays[i] as Float64Array;
-    out.push(pathFromFlat(flat));
+    out.push(buildPath2D(flat));
   }
   return out;
 }
