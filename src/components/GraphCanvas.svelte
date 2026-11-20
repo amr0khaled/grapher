@@ -11,6 +11,7 @@
     offsetY = $bindable(0),
     showGrid,
     darkMode,
+    onPathsChange,
   }: {
     expressions: ExpressionLine[];
     scale: number;
@@ -18,10 +19,12 @@
     offsetY: number;
     showGrid: boolean;
     darkMode: boolean;
+    onPathsChange?: (paths: (Path2D | null)[]) => void;
   } = $props();
 
   let canvasEl: HTMLCanvasElement | null = null;
   let pathCache = document.createElement("canvas");
+  let lastValidPaths = $state<(Path2D | null)[]>([]);
   let cssWidth = $state(800);
   let cssHeight = $state(600);
   let dpr = $state(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
@@ -147,17 +150,31 @@
       cssHeight,
     );
 
+    if (lastValidPaths.length !== paths.length) {
+      lastValidPaths = new Array(paths.length).fill(null);
+    }
+
+    onPathsChange?.(paths);
+
     for (let i = 0; i < expressions.length; i++) {
       const expr = expressions[i];
       const path = paths[i];
-      if (path && expr.expression.trim() && expr.visible !== false) {
-        ctx.save();
-        ctx.strokeStyle = expr.color;
-        ctx.lineWidth = 2.5;
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
-        ctx.stroke(path);
-        ctx.restore();
+      if (path) {
+        lastValidPaths[i] = path;
+      }
+
+      if (expr.expression.trim() && expr.visible !== false) {
+        const pathToDraw = path || lastValidPaths[i];
+        if (pathToDraw) {
+          ctx.save();
+          ctx.strokeStyle = expr.color;
+          ctx.lineWidth = 2.5;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          if (!path) ctx.globalAlpha = 0.5;
+          ctx.stroke(pathToDraw);
+          ctx.restore();
+        }
       }
     }
 

@@ -17,12 +17,23 @@ export const saveState = (state: AppState) => {
   }
 };
 
-export const loadState = (): AppState | null => {
+export const encodeShareUrl = (state: AppState): string => {
   try {
-    const saved = localStorage.getItem("grapher_state_v1");
-    return saved ? JSON.parse(saved) : null;
+    const json = JSON.stringify(state);
+    return btoa(encodeURIComponent(json));
   } catch (e) {
-    console.error("Failed to load state", e);
+    return "";
+  }
+};
+
+export const decodeShareUrl = (hash: string): AppState | null => {
+  try {
+    const clean = hash.startsWith("#") ? hash.slice(1) : hash;
+    if (!clean) return null;
+    const json = decodeURIComponent(atob(clean));
+    return JSON.parse(json);
+  } catch (e) {
     return null;
   }
 };
+

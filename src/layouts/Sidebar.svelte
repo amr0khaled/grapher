@@ -10,6 +10,7 @@
     updateColor,
     symbols,
     showSidebar,
+    errorStates = [],
     onClose,
   }: {
     expressions: ExpressionLine[];
@@ -19,6 +20,7 @@
     updateColor: (index: number, color: string) => void;
     symbols: Record<string, number>;
     showSidebar: boolean;
+    errorStates?: boolean[];
     onClose: () => void;
   } = $props();
 </script>
@@ -35,6 +37,7 @@
     {updateExpression}
     {updateColor}
     {symbols}
+    errors={errorStates}
   />
 </aside>
 

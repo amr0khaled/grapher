@@ -23,6 +23,16 @@
     return evaluateSymbols(expressions.map((e) => e.expression));
   });
 
+  let errorStates = $state<boolean[]>([]);
+  function handlePathsChange(paths: (Path2D | null)[]) {
+    errorStates = expressions.map((expr, i) => {
+      const text = expr.expression.trim();
+      if (text === "") return false;
+      const isAssignmentOrFunc = /^\s*[a-zA-Z_]\w*\s*=/.test(text) || /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
+      return !isAssignmentOrFunc && paths[i] === null;
+    });
+  }
+
   // --- View state ---
   let windowWidth = $state(typeof window !== "undefined" ? window.innerWidth : 800);
   let windowHeight = $state(typeof window !== "undefined" ? window.innerHeight : 600);
@@ -203,6 +213,7 @@
       {updateColor}
       {symbols}
       {showSidebar}
+      {errorStates}
       onClose={() => (showSidebar = false)}
     ></Sidebar>
   {/if}
@@ -223,6 +234,7 @@
         {offsetY}
         {showGrid}
         {darkMode}
+        onPathsChange={handlePathsChange}
       />
     {:else}
       <div class="loading">Loading Engine…</div>
@@ -269,6 +281,7 @@
           {updateExpression}
           {updateColor}
           {symbols}
+          errors={errorStates}
         />
       </BottomSheet>
     {/if}
