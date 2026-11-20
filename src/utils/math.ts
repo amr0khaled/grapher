@@ -1,5 +1,5 @@
 // Sampling via Rust WASM engine + grid helpers
-import initEngine, { sample } from '../wasm/grapher_engine.js';
+import initEngine, { sample, is_drawable } from '../wasm/grapher_engine.js';
 import { toPlainInfix } from './latex';
 
 
@@ -27,6 +27,13 @@ function pathFromFlat(flat: Float64Array): string {
     pen = true;
   }
   return d;
+}
+
+// Classify whether an expression should be drawn on the canvas.
+// Definitions (a = 5) return false; y=..., x=..., f(x)=..., implicit lhs=rhs return true.
+export function isDrawable(expression: string): boolean {
+  const plain = toPlainInfix(expression);
+  return is_drawable(plain);
 }
 
 // Sample all lines in one batch; returns index-aligned SVG path strings.

@@ -50,3 +50,37 @@ pub fn get_symbol_values(_lines: Vec<String>) -> js_sys::Object {
     }
     obj
 }
+
+#[wasm_bindgen]
+pub fn is_drawable(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    if !s.contains('=') {
+        return false;
+    }
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let lhs = parts[0].trim().to_lowercase();
+    if lhs == "x" || lhs == "y" || lhs.contains('(') {
+        return true;
+    }
+    if lhs.len() == 1 {
+        return false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_is_drawable() {
+        assert!(is_drawable("y=x"));
+        assert!(!is_drawable("a=5"));
+        assert!(is_drawable("x^2+y^2=1"));
+    }
+}
