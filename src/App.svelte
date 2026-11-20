@@ -5,6 +5,7 @@
   import SettingsCard from "./components/SettingsCard.svelte";
   import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
+  import { evaluateSymbols } from "./utils/math";
   import type { ExpressionLine } from "./types.ts";
 
   let expressions = $state<ExpressionLine[]>([
@@ -12,20 +13,20 @@
     { expression: "", color: generateColor(1) },
   ]);
 
-  // Symbol table derived from assignment lines (top-down evaluation).
-  let symbols: Record<string, number> = {};
+  // Symbol table derived from assignment lines (top-down evaluation via WASM).
+  let symbols = $derived.by(() => {
+    if (!engineReady) return {};
+    return evaluateSymbols(expressions.map((e) => e.expression));
+  });
 
   // --- View state ---
   let scale = $state(100);
-  const innerWidth = 800;
-  const innerHeight = 600;
-  const hWidth = innerWidth / 2;
-  const hHeight = innerHeight / 2;
-  let offsetX = $derived(hWidth);
-  let offsetY = $derived(hHeight);
+  let offsetX = $state(400);
+  let offsetY = $state(300);
   let showGrid = $state(true);
   let darkMode = $state(true);
   let showSettings = $state(false);
+  let showSidebar = $state(false);
   let engineReady = $state(false);
 
   // --- Tunables (acceleration / limits) ---
@@ -64,8 +65,10 @@
     const svg = document.querySelector(".graph-canvas");
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const mx = ((clientX - rect.left) / rect.width) * innerWidth;
-    const my = ((clientY - rect.top) / rect.height) * innerHeight;
+    const width = rect.width;
+    const height = rect.height;
+    const mx = ((clientX - rect.left) / width) * width;
+    const my = ((clientY - rect.top) / height) * height;
     const f = Math.pow(factor, ZOOM_ACCEL);
     const ns = clampScale(scale * f);
     const k = ns / scale;
@@ -131,10 +134,12 @@
   }
   function onPointerMove(e: MouseEvent) {
     if (!isPanning) return;
-    const svg = document.querySelector(".graph-canvas");
-    const ratio = svg ? innerWidth / svg.getBoundingClientRect().width : 1;
-    offsetX = panStartOffset.x + (e.clientX - panStart.x) * ratio * PAN_ACCEL;
-    offsetY = panStartOffset.y + (e.clientY - panStart.y) * ratio * PAN_ACCEL;
+    const canvas = document.querySelector(".graph-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    const ratio = rect ? rect.width / (canvas as HTMLCanvasElement).width : 1;
+    // We adjust pan relative to actual canvas CSS width/height ratio if needed, or simply 1:1 delta
+    offsetX = panStartOffset.x + (e.clientX - panStart.x) * PAN_ACCEL;
+    offsetY = panStartOffset.y + (e.clientY - panStart.y) * PAN_ACCEL;
   }
   function onPointerUp(e: MouseEvent) {
     isPanning = false;
@@ -142,8 +147,10 @@
 
   function resetView() {
     scale = 50;
-    offsetX = hWidth;
-    offsetY = hHeight;
+    const canvas = document.querySelector(".graph-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    offsetX = (rect?.width ?? 800) / 2;
+    offsetY = (rect?.height ?? 600) / 2;
   }
 
   $effect(() => {
@@ -154,6 +161,7 @@
     try {
       await initEngine();
       engineReady = true;
+      resetView();
     } catch (e) {
       console.error("WASM engine failed to load", e);
     }
@@ -161,6 +169,17 @@
 </script>
 
 <div class="grapher-layout" class:dark={darkMode}>
+  {#if showSidebar}
+    <div
+      class="sidebar-scrim"
+      role="button"
+      tabindex="0"
+      aria-label="Close sidebar"
+      onclick={() => (showSidebar = false)}
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
+    ></div>
+  {/if}
+
   <Sidebar
     {expressions}
     {addLine}
@@ -168,6 +187,8 @@
     {updateExpression}
     {updateColor}
     {symbols}
+    {showSidebar}
+    onClose={() => (showSidebar = false)}
   ></Sidebar>
 
   <main
@@ -187,8 +208,6 @@
         {scale}
         {offsetX}
         {offsetY}
-        {innerHeight}
-        {innerWidth}
         {showGrid}
         {darkMode}
       />
@@ -197,16 +216,28 @@
     {/if}
     <div class="zoom-controls">
       <button
+        class="sidebar-toggle"
+        onclick={() => (showSidebar = !showSidebar)}
+        title="Toggle Sidebar"
+        aria-label="Toggle Sidebar">☰</button
+      >
+      <button
         class="settings-btn"
         onclick={() => (showSettings = !showSettings)}
         title="Settings"
         aria-label="Toggle settings">⚙️</button
       >
-      <button onclick={() => zoomAtPoint(hWidth, hHeight, ZOOM_BUTTON_STEP)}
-        >+</button
+      <button onclick={() => {
+        const canvas = document.querySelector(".graph-canvas");
+        const rect = canvas?.getBoundingClientRect();
+        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, ZOOM_BUTTON_STEP);
+      }}>+</button
       >
-      <button onclick={() => zoomAtPoint(hWidth, hHeight, 1 / ZOOM_BUTTON_STEP)}
-        >-</button
+      <button onclick={() => {
+        const canvas = document.querySelector(".graph-canvas");
+        const rect = canvas?.getBoundingClientRect();
+        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, 1 / ZOOM_BUTTON_STEP);
+      }}>-</button
       >
     </div>
     <SettingsCard
@@ -255,6 +286,8 @@
       sans-serif;
     background: var(--bg);
     color: var(--fg);
+    position: relative;
+    overflow: hidden;
   }
 
   .graph-main {
@@ -294,9 +327,16 @@
     font-weight: bold;
     color: var(--fg);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .zoom-controls button:hover {
     background: var(--border);
+  }
+
+  .sidebar-toggle {
+    display: none;
   }
 
   .settings-btn {
@@ -305,5 +345,33 @@
     font-size: 1.2rem;
     cursor: pointer;
     color: var(--fg);
+  }
+
+  .sidebar-scrim {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .grapher-layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar-toggle {
+      display: flex;
+    }
+    .sidebar-scrim {
+      display: block;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 15;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .zoom-controls button {
+      width: 48px;
+      height: 48px;
+      font-size: 1.5rem;
+    }
   }
 </style>

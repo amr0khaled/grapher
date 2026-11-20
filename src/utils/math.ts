@@ -1,5 +1,5 @@
 // Sampling via Rust WASM engine + grid helpers
-import initEngine, { sample } from '../wasm/grapher_engine.js';
+import initEngine, { get_symbol_values, sample } from '../wasm/grapher_engine.js';
 import { toPlainInfix } from './latex';
 
 
@@ -10,6 +10,12 @@ try {
   await initEngine();
 } catch (e) {
   console.error("WASM engine init failed", e);
+}
+
+// Evaluate symbol values from expressions
+export function evaluateSymbols(expressions: string[]): Record<string, number> {
+  const plain = expressions.map((e) => toPlainInfix(e));
+  return get_symbol_values(plain) as Record<string, number>;
 }
 
 // Build Path2D from one line's flat [px, py, ...] buffer; NaN pairs break segments.

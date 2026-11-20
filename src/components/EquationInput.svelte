@@ -23,7 +23,7 @@
   } = $props();
 
   let mathFieldEl:
-    | (HTMLElement & { value?: string; focus?: () => void })
+    | (HTMLElement & { value?: string; focus?: () => void; inlineShortcuts?: Record<string, string> })
     | null = null;
 
   onMount(() => {
