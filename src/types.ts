@@ -1,6 +1,7 @@
 export interface ExpressionLine {
   expression: string;
   color: string;
+  visible: boolean;
 }
 
 export interface GridLine {

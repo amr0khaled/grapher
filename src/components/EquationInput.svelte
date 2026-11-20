@@ -105,24 +105,30 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 0;
-    min-height: 2.4rem;
+    min-height: 44px;
   }
   .color-picker {
-    width: 22px;
-    height: 22px;
+    width: 32px;
+    height: 32px;
     border: none;
     border-radius: 50%;
     padding: 0;
     cursor: pointer;
     background: none;
     flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
   }
   .eq-number {
-    width: 18px;
+    width: 24px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--muted);
-    text-align: right;
     flex-shrink: 0;
   }
   .eq-input {

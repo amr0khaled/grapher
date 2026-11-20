@@ -150,7 +150,7 @@
     for (let i = 0; i < expressions.length; i++) {
       const expr = expressions[i];
       const path = paths[i];
-      if (path && expr.expression.trim()) {
+      if (path && expr.expression.trim() && expr.visible !== false) {
         ctx.save();
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5;

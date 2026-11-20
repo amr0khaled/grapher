@@ -3,15 +3,18 @@
   import Sidebar from "./layouts/Sidebar.svelte";
   import GraphCanvas from "./components/GraphCanvas.svelte";
   import SettingsCard from "./components/SettingsCard.svelte";
+  import BottomSheet from "./components/BottomSheet.svelte";
+  import EquationList from "./components/EquationList.svelte";
   import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
   import { evaluateSymbols } from "./utils/math";
+  import { resolveLayoutMode } from "./utils/device.svelte";
   import type { ExpressionLine } from "./types.ts";
   import { GestureTracker } from "./utils/gestureController";
 
   let expressions = $state<ExpressionLine[]>([
-    { expression: "", color: generateColor(0) },
-    { expression: "", color: generateColor(1) },
+    { expression: "", color: generateColor(0), visible: true },
+    { expression: "", color: generateColor(1), visible: true },
   ]);
 
   // Symbol table derived from assignment lines (top-down evaluation via WASM).
@@ -21,6 +24,22 @@
   });
 
   // --- View state ---
+  let windowWidth = $state(typeof window !== "undefined" ? window.innerWidth : 800);
+  let windowHeight = $state(typeof window !== "undefined" ? window.innerHeight : 600);
+
+  onMount(() => {
+    const handleResize = () => {
+      windowWidth = window.innerWidth;
+      windowHeight = window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  });
+
+  let layoutMode = $derived(
+    resolveLayoutMode(windowWidth, windowHeight, typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches, typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches)
+  );
+
   let scale = $state(100);
   let offsetX = $state(400);
   let offsetY = $state(300);
@@ -46,6 +65,7 @@
     expressions.splice(afterIndex + 1, 0, {
       expression: "",
       color: generateColor(expressions.length),
+      visible: true,
     });
   }
 
@@ -60,6 +80,10 @@
 
   function updateColor(index: number, color: string) {
     expressions[index].color = color;
+  }
+
+  function toggleVisibility(index: number) {
+    expressions[index].visible = !expressions[index].visible;
   }
 
   function zoomAtPoint(clientX: number, clientY: number, factor: number) {
@@ -158,28 +182,30 @@
   });
 </script>
 
-<div class="grapher-layout" class:dark={darkMode}>
-  {#if showSidebar}
-    <div
-      class="sidebar-scrim"
-      role="button"
-      tabindex="0"
-      aria-label="Close sidebar"
-      onclick={() => (showSidebar = false)}
-      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
-    ></div>
-  {/if}
+<div class="grapher-layout" class:dark={darkMode} class:mobile={layoutMode === 'mobile'}>
+  {#if layoutMode !== 'mobile'}
+    {#if showSidebar}
+      <div
+        class="sidebar-scrim"
+        role="button"
+        tabindex="0"
+        aria-label="Close sidebar"
+        onclick={() => (showSidebar = false)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
+      ></div>
+    {/if}
 
-  <Sidebar
-    {expressions}
-    {addLine}
-    {removeLine}
-    {updateExpression}
-    {updateColor}
-    {symbols}
-    {showSidebar}
-    onClose={() => (showSidebar = false)}
-  ></Sidebar>
+    <Sidebar
+      {expressions}
+      {addLine}
+      {removeLine}
+      {updateExpression}
+      {updateColor}
+      {symbols}
+      {showSidebar}
+      onClose={() => (showSidebar = false)}
+    ></Sidebar>
+  {/if}
 
   <main
     class="graph-main"
@@ -234,6 +260,18 @@
       bind:visible={showSettings}
       onResetView={resetView}
     />
+    {#if layoutMode === 'mobile'}
+      <BottomSheet>
+        <EquationList
+          {expressions}
+          {addLine}
+          {removeLine}
+          {updateExpression}
+          {updateColor}
+          {symbols}
+        />
+      </BottomSheet>
+    {/if}
   </main>
 </div>
 
