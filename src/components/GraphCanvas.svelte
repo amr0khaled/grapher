@@ -20,7 +20,7 @@
   } = $props();
 
   let canvasEl: HTMLCanvasElement | null = null;
-  let cacheCanvas = document.createElement("canvas");
+  let pathCache = document.createElement("canvas");
   let cssWidth = $state(800);
   let cssHeight = $state(600);
   let dpr = $state(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
@@ -49,30 +49,12 @@
     return () => observer.disconnect();
   });
 
-  function renderPrecise() {
-    if (!canvasEl || cssWidth <= 0 || cssHeight <= 0) return;
-    const ctx = cacheCanvas.getContext("2d");
-    if (!ctx) return;
-
-    // 3x overscan to prevent blank edges during pan/zoom
-    const padX = cssWidth;
-    const padY = cssHeight;
-    const overWidth = cssWidth + padX * 2;
-    const overHeight = cssHeight + padY * 2;
-
-    const backingWidth = Math.round(overWidth * dpr);
-    const backingHeight = Math.round(overHeight * dpr);
-    if (cacheCanvas.width !== backingWidth || cacheCanvas.height !== backingHeight) {
-      cacheCanvas.width = backingWidth;
-      cacheCanvas.height = backingHeight;
-    }
-
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // Offset drawing so current viewport is centered in 3x cache
-    ctx.translate(padX, padY);
-
+  function drawGridAndAxes(
+    ctx: CanvasRenderingContext2D,
+    curScale: number,
+    curOffsetX: number,
+    curOffsetY: number
+  ) {
     const style = getComputedStyle(document.documentElement);
     const bgCol = style.getPropertyValue("--bg").trim() || (darkMode ? "#0f172a" : "#ffffff");
     const gridMinorCol = style.getPropertyValue("--grid").trim() || (darkMode ? "#1e293b" : "#e2e8f0");
@@ -81,46 +63,44 @@
     const mutedCol = style.getPropertyValue("--muted").trim() || (darkMode ? "#94a3b8" : "#64748b");
 
     ctx.fillStyle = bgCol;
-    ctx.fillRect(-padX, -padY, overWidth, overHeight);
+    ctx.fillRect(0, 0, cssWidth, cssHeight);
 
     if (showGrid) {
-      // Sample grid lines for the full overscan range
-      const xLines = generateGridLines(scale, offsetX, overWidth);
+      const xLines = generateGridLines(curScale, curOffsetX, cssWidth);
       for (const line of xLines) {
-        const x = line.pos - padX; // Adjust for ctx.translate
         ctx.beginPath();
         ctx.strokeStyle = line.isMajor ? gridMajorCol : gridMinorCol;
         ctx.lineWidth = line.isMajor ? 1.5 : 1;
-        ctx.moveTo(Math.floor(x) + 0.5, -padY);
-        ctx.lineTo(Math.floor(x) + 0.5, cssHeight + padY);
+        ctx.moveTo(Math.floor(line.pos) + 0.5, 0);
+        ctx.lineTo(Math.floor(line.pos) + 0.5, cssHeight);
         ctx.stroke();
 
-        if (line.isMajor && x >= 0 && x <= cssWidth) {
+        if (line.isMajor) {
           ctx.fillStyle = mutedCol;
           ctx.font = "bold 11px sans-serif";
           ctx.textAlign = "center";
-          const labelY = offsetY < 15 ? 15 : offsetY > cssHeight - 15 ? cssHeight - 15 : offsetY - 5;
-          ctx.fillText(String(line.label), x, labelY);
+          ctx.textBaseline = "alphabetic";
+          const labelY = curOffsetY < 15 ? 15 : curOffsetY > cssHeight - 15 ? cssHeight - 15 : curOffsetY - 5;
+          ctx.fillText(String(line.label), line.pos, labelY);
         }
       }
 
-      const yLines = generateGridLines(scale, offsetY, overHeight);
+      const yLines = generateGridLines(curScale, curOffsetY, cssHeight);
       for (const line of yLines) {
-        const y = line.pos - padY;
         ctx.beginPath();
         ctx.strokeStyle = line.isMajor ? gridMajorCol : gridMinorCol;
         ctx.lineWidth = line.isMajor ? 1.5 : 1;
-        ctx.moveTo(-padX, Math.floor(y) + 0.5);
-        ctx.lineTo(cssWidth + padX, Math.floor(y) + 0.5);
+        ctx.moveTo(0, Math.floor(line.pos) + 0.5);
+        ctx.lineTo(cssWidth, Math.floor(line.pos) + 0.5);
         ctx.stroke();
 
-        if (line.isMajor && y >= 0 && y <= cssHeight) {
+        if (line.isMajor) {
           ctx.fillStyle = mutedCol;
           ctx.font = "bold 11px sans-serif";
-          ctx.textAlign = offsetX < 25 ? "left" : offsetX > cssWidth - 15 ? "right" : "left";
+          ctx.textAlign = curOffsetX < 25 ? "left" : curOffsetX > cssWidth - 15 ? "right" : "left";
           ctx.textBaseline = "middle";
-          const labelX = offsetX < 25 ? 25 : offsetX > cssWidth - 15 ? cssWidth - 15 : offsetX + 5;
-          ctx.fillText(String(-line.label), labelX, y);
+          const labelX = curOffsetX < 25 ? 25 : curOffsetX > cssWidth - 15 ? cssWidth - 15 : curOffsetX + 5;
+          ctx.fillText(String(-line.label), labelX, line.pos);
         }
       }
     }
@@ -128,19 +108,36 @@
     ctx.beginPath();
     ctx.strokeStyle = axisCol;
     ctx.lineWidth = 1.5;
-    ctx.moveTo(-padX, Math.floor(offsetY) + 0.5);
-    ctx.lineTo(cssWidth + padX, Math.floor(offsetY) + 0.5);
-    ctx.moveTo(Math.floor(offsetX) + 0.5, -padY);
-    ctx.lineTo(Math.floor(offsetX) + 0.5, cssHeight + padY);
+    ctx.moveTo(0, Math.floor(curOffsetY) + 0.5);
+    ctx.lineTo(cssWidth, Math.floor(curOffsetY) + 0.5);
+    ctx.moveTo(Math.floor(curOffsetX) + 0.5, 0);
+    ctx.lineTo(Math.floor(curOffsetX) + 0.5, cssHeight);
     ctx.stroke();
+  }
+
+  function renderPrecise() {
+    if (!canvasEl || cssWidth <= 0 || cssHeight <= 0) return;
+    const ctx = pathCache.getContext("2d");
+    if (!ctx) return;
+
+    const backingWidth = Math.round(cssWidth * dpr);
+    const backingHeight = Math.round(cssHeight * dpr);
+    if (pathCache.width !== backingWidth || pathCache.height !== backingHeight) {
+      pathCache.width = backingWidth;
+      pathCache.height = backingHeight;
+    }
+
+    ctx.clearRect(0, 0, pathCache.width, pathCache.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
 
     const paths = sampleToPath2D(
       expressions.map((e) => e.expression),
       scale,
       offsetX,
       offsetY,
-      overWidth,
-      overHeight,
+      cssWidth,
+      cssHeight,
     );
 
     for (let i = 0; i < expressions.length; i++) {
@@ -148,7 +145,6 @@
       const path = paths[i];
       if (path && expr.expression.trim()) {
         ctx.save();
-        ctx.translate(-padX, -padY); // Sample covers overWidth, so align to top-left of overscan
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5;
         ctx.lineJoin = "round";
@@ -177,17 +173,12 @@
     ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     ctx.save();
     ctx.scale(dpr, dpr);
+    drawGridAndAxes(ctx, scale, offsetX, offsetY);
+    ctx.restore();
 
-    // Apply relative interaction transform
-    ctx.translate(transform.dx, transform.dy);
-    // Scale around current center? No, simpler: scale relative to base view
-    ctx.scale(transform.k, transform.k);
-
-    // Draw 3x cache so its original center aligns with viewport top-left
-    // Original center was at (padX, padY) in cache coords.
-    // We want that center to stay at (0,0) in viewport space if no pan happened.
-    ctx.drawImage(cacheCanvas, -cssWidth, -cssHeight, cssWidth * 3, cssHeight * 3, -cssWidth, -cssHeight, cssWidth * 3, cssHeight * 3);
-
+    ctx.save();
+    ctx.setTransform(transform.k, 0, 0, transform.k, transform.dx * dpr, transform.dy * dpr);
+    ctx.drawImage(pathCache, 0, 0);
     ctx.restore();
   }
 

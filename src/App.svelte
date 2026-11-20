@@ -28,11 +28,11 @@
   let showSettings = $state(false);
   let showSidebar = $state(false);
   let engineReady = $state(false);
+  let zoomStep = $state(1.12);
 
   // --- Tunables (acceleration / limits) ---
   const MIN_SCALE = 0.0005;
   const MAX_SCALE = 1e9;
-  const ZOOM_STEP = 1.12; // wheel zoom factor per notch
   const ZOOM_BUTTON_STEP = 1.25; // +/- button factor
   const PAN_ACCEL = 1; // >1 faster pan, <1 slower; 1 = 1:1 with cursor
   const ZOOM_ACCEL = 0.5; // smoother wheel zoom
@@ -79,9 +79,8 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
-    const delta = Math.sign(e.deltaY);
-    if (delta === 0) return;
-    const factor = delta < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+    const normalized = Math.max(-100, Math.min(100, e.deltaY));
+    const factor = Math.pow(zoomStep, -normalized / 100);
     zoomAtPoint(e.clientX, e.clientY, factor);
   }
   let initialZoom = {
@@ -116,7 +115,7 @@
       const dy = t0.clientY - t1.clientY;
       const dist = Math.hypot(dx, dy);
       const zoomIn = dist > initialZoom.x;
-      zoomAtPoint(mx, my, zoomIn ? ZOOM_STEP : 1 / ZOOM_STEP);
+      zoomAtPoint(mx, my, zoomIn ? zoomStep : 1 / zoomStep);
     }
   }
   function handleTouchEnd() {
@@ -246,6 +245,7 @@
     <SettingsCard
       bind:showGrid
       bind:darkMode
+      bind:zoomStep
       bind:visible={showSettings}
       onResetView={resetView}
     />
