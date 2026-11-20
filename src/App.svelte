@@ -191,6 +191,18 @@
       await initEngine();
       engineReady = true;
       resetView();
+      history.pushState({ modal: false }, "", window.location.href);
+      window.addEventListener("popstate", () => {
+        // @ts-ignore
+        if (window.mathVirtualKeyboard?.visible) {
+          // @ts-ignore
+          window.mathVirtualKeyboard.hide();
+          history.pushState({ modal: false }, "", window.location.href);
+        } else if (bottomSheetSnap === "full" || bottomSheetSnap === "half") {
+          bottomSheetSnap = "peek";
+          history.pushState({ modal: false }, "", window.location.href);
+        }
+      });
     } catch (e) {
       console.error("WASM engine failed to load", e);
     }
