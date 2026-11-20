@@ -20,21 +20,19 @@
   } = $props();
 
   let canvasEl: HTMLCanvasElement | null = null;
+  let cacheCanvas = document.createElement("canvas");
   let cssWidth = $state(800);
   let cssHeight = $state(600);
   let dpr = $state(typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
 
-  // Transient CSS transform for snappy panning/zooming without immediate re-sampling
   let isInteracting = $state(false);
-  let transformStyle = $state("");
+  let transform = { k: 1, dx: 0, dy: 0 };
   let debounceTimer: number | null = null;
 
-  // Track base view state when interaction starts
-  let baseScale = 0;
+  let baseScale = 1;
   let baseOffsetX = 0;
   let baseOffsetY = 0;
 
-  // ResizeObserver to track container sizing dynamically
   onMount(() => {
     if (!canvasEl) return;
     const observer = new ResizeObserver((entries) => {
@@ -43,6 +41,7 @@
         if (width > 0 && height > 0) {
           cssWidth = width;
           cssHeight = height;
+          renderPrecise();
         }
       }
     });
@@ -50,50 +49,30 @@
     return () => observer.disconnect();
   });
 
-  // Detect scale/offset changes to handle transient CSS transform vs precise redraw
-  $effect(() => {
-    // If scale or offset changes, trigger debounce
-    if (!isInteracting) {
-      isInteracting = true;
-      baseScale = scale;
-      baseOffsetX = offsetX;
-      baseOffsetY = offsetY;
-    }
-
-    // Compute relative transform matrix string for GPU acceleration during gesture
-    const k = scale / baseScale;
-    const dx = offsetX - baseOffsetX * k;
-    const dy = offsetY - baseOffsetY * k;
-    transformStyle = `matrix(${k}, 0, 0, ${k}, ${dx}, ${dy})`;
-
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = window.setTimeout(() => {
-      isInteracting = false;
-      transformStyle = "";
-      baseScale = scale;
-      baseOffsetX = offsetX;
-      baseOffsetY = offsetY;
-    }, 120);
-  });
-
-  // Main canvas render loop
-  $effect(() => {
+  function renderPrecise() {
     if (!canvasEl || cssWidth <= 0 || cssHeight <= 0) return;
-    const ctx = canvasEl.getContext("2d");
+    const ctx = cacheCanvas.getContext("2d");
     if (!ctx) return;
 
-    // Adjust backing store resolution for DPR
-    const backingWidth = Math.round(cssWidth * dpr);
-    const backingHeight = Math.round(cssHeight * dpr);
-    if (canvasEl.width !== backingWidth || canvasEl.height !== backingHeight) {
-      canvasEl.width = backingWidth;
-      canvasEl.height = backingHeight;
+    // 3x overscan to prevent blank edges during pan/zoom
+    const padX = cssWidth;
+    const padY = cssHeight;
+    const overWidth = cssWidth + padX * 2;
+    const overHeight = cssHeight + padY * 2;
+
+    const backingWidth = Math.round(overWidth * dpr);
+    const backingHeight = Math.round(overHeight * dpr);
+    if (cacheCanvas.width !== backingWidth || cacheCanvas.height !== backingHeight) {
+      cacheCanvas.width = backingWidth;
+      cacheCanvas.height = backingHeight;
     }
 
     ctx.save();
     ctx.scale(dpr, dpr);
 
-    // Read current CSS theme colors dynamically
+    // Offset drawing so current viewport is centered in 3x cache
+    ctx.translate(padX, padY);
+
     const style = getComputedStyle(document.documentElement);
     const bgCol = style.getPropertyValue("--bg").trim() || (darkMode ? "#0f172a" : "#ffffff");
     const gridMinorCol = style.getPropertyValue("--grid").trim() || (darkMode ? "#1e293b" : "#e2e8f0");
@@ -101,73 +80,67 @@
     const axisCol = style.getPropertyValue("--axis").trim() || (darkMode ? "#94a3b8" : "#475569");
     const mutedCol = style.getPropertyValue("--muted").trim() || (darkMode ? "#94a3b8" : "#64748b");
 
-    // Clear background
     ctx.fillStyle = bgCol;
-    ctx.fillRect(0, 0, cssWidth, cssHeight);
+    ctx.fillRect(-padX, -padY, overWidth, overHeight);
 
-    // Draw Grid & Axes
     if (showGrid) {
-      // Minor/Major vertical grid lines
-      const xLines = generateGridLines(scale, offsetX, cssWidth);
+      // Sample grid lines for the full overscan range
+      const xLines = generateGridLines(scale, offsetX, overWidth);
       for (const line of xLines) {
+        const x = line.pos - padX; // Adjust for ctx.translate
         ctx.beginPath();
         ctx.strokeStyle = line.isMajor ? gridMajorCol : gridMinorCol;
         ctx.lineWidth = line.isMajor ? 1.5 : 1;
-        ctx.moveTo(line.pos, 0);
-        ctx.lineTo(line.pos, cssHeight);
+        ctx.moveTo(Math.floor(x) + 0.5, -padY);
+        ctx.lineTo(Math.floor(x) + 0.5, cssHeight + padY);
         ctx.stroke();
 
-        if (line.isMajor) {
+        if (line.isMajor && x >= 0 && x <= cssWidth) {
           ctx.fillStyle = mutedCol;
           ctx.font = "bold 11px sans-serif";
           ctx.textAlign = "center";
-          ctx.textBaseline = "alphabetic";
           const labelY = offsetY < 15 ? 15 : offsetY > cssHeight - 15 ? cssHeight - 15 : offsetY - 5;
-          ctx.fillText(String(line.label), line.pos, labelY);
+          ctx.fillText(String(line.label), x, labelY);
         }
       }
 
-      // Minor/Major horizontal grid lines
-      const yLines = generateGridLines(scale, offsetY, cssHeight);
+      const yLines = generateGridLines(scale, offsetY, overHeight);
       for (const line of yLines) {
+        const y = line.pos - padY;
         ctx.beginPath();
         ctx.strokeStyle = line.isMajor ? gridMajorCol : gridMinorCol;
         ctx.lineWidth = line.isMajor ? 1.5 : 1;
-        ctx.moveTo(0, line.pos);
-        ctx.lineTo(cssWidth, line.pos);
+        ctx.moveTo(-padX, Math.floor(y) + 0.5);
+        ctx.lineTo(cssWidth + padX, Math.floor(y) + 0.5);
         ctx.stroke();
 
-        if (line.isMajor) {
+        if (line.isMajor && y >= 0 && y <= cssHeight) {
           ctx.fillStyle = mutedCol;
           ctx.font = "bold 11px sans-serif";
           ctx.textAlign = offsetX < 25 ? "left" : offsetX > cssWidth - 15 ? "right" : "left";
           ctx.textBaseline = "middle";
           const labelX = offsetX < 25 ? 25 : offsetX > cssWidth - 15 ? cssWidth - 15 : offsetX + 5;
-          ctx.fillText(String(-line.label), labelX, line.pos);
+          ctx.fillText(String(-line.label), labelX, y);
         }
       }
     }
 
-    // Main Axes
     ctx.beginPath();
     ctx.strokeStyle = axisCol;
     ctx.lineWidth = 1.5;
-    // X axis (horizontal line at y = offsetY)
-    ctx.moveTo(0, offsetY);
-    ctx.lineTo(cssWidth, offsetY);
-    // Y axis (vertical line at x = offsetX)
-    ctx.moveTo(offsetX, 0);
-    ctx.lineTo(offsetX, cssHeight);
+    ctx.moveTo(-padX, Math.floor(offsetY) + 0.5);
+    ctx.lineTo(cssWidth + padX, Math.floor(offsetY) + 0.5);
+    ctx.moveTo(Math.floor(offsetX) + 0.5, -padY);
+    ctx.lineTo(Math.floor(offsetX) + 0.5, cssHeight + padY);
     ctx.stroke();
 
-    // Sample and draw curves via Path2D
     const paths = sampleToPath2D(
       expressions.map((e) => e.expression),
       scale,
       offsetX,
       offsetY,
-      cssWidth,
-      cssHeight,
+      overWidth,
+      overHeight,
     );
 
     for (let i = 0; i < expressions.length; i++) {
@@ -175,22 +148,75 @@
       const path = paths[i];
       if (path && expr.expression.trim()) {
         ctx.save();
+        ctx.translate(-padX, -padY); // Sample covers overWidth, so align to top-left of overscan
         ctx.strokeStyle = expr.color;
         ctx.lineWidth = 2.5;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
         ctx.stroke(path);
         ctx.restore();
       }
     }
 
     ctx.restore();
+    renderTransient();
+  }
+
+  function renderTransient() {
+    if (!canvasEl) return;
+    const ctx = canvasEl.getContext("2d");
+    if (!ctx) return;
+
+    const backingWidth = Math.round(cssWidth * dpr);
+    const backingHeight = Math.round(cssHeight * dpr);
+    if (canvasEl.width !== backingWidth || canvasEl.height !== backingHeight) {
+      canvasEl.width = backingWidth;
+      canvasEl.height = backingHeight;
+    }
+
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    // Apply relative interaction transform
+    ctx.translate(transform.dx, transform.dy);
+    // Scale around current center? No, simpler: scale relative to base view
+    ctx.scale(transform.k, transform.k);
+
+    // Draw 3x cache so its original center aligns with viewport top-left
+    // Original center was at (padX, padY) in cache coords.
+    // We want that center to stay at (0,0) in viewport space if no pan happened.
+    ctx.drawImage(cacheCanvas, -cssWidth, -cssHeight, cssWidth * 3, cssHeight * 3, -cssWidth, -cssHeight, cssWidth * 3, cssHeight * 3);
+
+    ctx.restore();
+  }
+
+  $effect(() => {
+    if (!isInteracting) {
+      isInteracting = true;
+      baseScale = scale;
+      baseOffsetX = offsetX;
+      baseOffsetY = offsetY;
+    }
+
+    transform.k = scale / baseScale;
+    transform.dx = offsetX - baseOffsetX * transform.k;
+    transform.dy = offsetY - baseOffsetY * transform.k;
+
+    renderTransient();
+
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(() => {
+      isInteracting = false;
+      transform = { k: 1, dx: 0, dy: 0 };
+      renderPrecise();
+    }, 120);
   });
 </script>
 
 <canvas
   bind:this={canvasEl}
   class="graph-canvas"
-  style:transform={transformStyle}
-  style:transform-origin="0px 0px"
   data-dark={darkMode}
 ></canvas>
 
@@ -203,7 +229,6 @@
     cursor: grab;
     touch-action: none;
     user-select: none;
-    will-change: transform;
   }
   .graph-canvas:active {
     cursor: grabbing;

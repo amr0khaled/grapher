@@ -32,10 +32,10 @@
   // --- Tunables (acceleration / limits) ---
   const MIN_SCALE = 0.0005;
   const MAX_SCALE = 1e9;
-  const ZOOM_STEP = 1.05; // wheel zoom factor per notch
+  const ZOOM_STEP = 1.12; // wheel zoom factor per notch
   const ZOOM_BUTTON_STEP = 1.25; // +/- button factor
   const PAN_ACCEL = 1; // >1 faster pan, <1 slower; 1 = 1:1 with cursor
-  const ZOOM_ACCEL = 1; // exponent on wheel delta (1 = normal, 2 = snappier)
+  const ZOOM_ACCEL = 0.5; // smoother wheel zoom
 
   function clampScale(s: number) {
     return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
@@ -79,7 +79,10 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
-    zoomAtPoint(e.clientX, e.clientY, e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
+    const delta = Math.sign(e.deltaY);
+    if (delta === 0) return;
+    const factor = delta < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+    zoomAtPoint(e.clientX, e.clientY, factor);
   }
   let initialZoom = {
     x: 0,
