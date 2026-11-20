@@ -7,6 +7,7 @@
   import { generateColor } from "./utils/colors";
   import { evaluateSymbols } from "./utils/math";
   import type { ExpressionLine } from "./types.ts";
+  import { GestureTracker } from "./utils/gestureController";
 
   let expressions = $state<ExpressionLine[]>([
     { expression: "", color: generateColor(0) },
@@ -83,69 +84,56 @@
     const factor = Math.pow(zoomStep, -normalized / 100);
     zoomAtPoint(e.clientX, e.clientY, factor);
   }
-  let initialZoom = {
-    x: 0,
-    y: 0,
-  };
-  function handleTouchZoomStart(e: TouchEvent) {
-    if (e.touches.length == 2) {
-      let x = 0,
-        y = 0;
-      x = Math.abs(
-        (e.targetTouches.item(0)?.clientX ?? 0) -
-          (e.targetTouches.item(1)?.clientX ?? 0),
-      );
-      y = Math.abs(
-        (e.targetTouches.item(0)?.clientY ?? 0) -
-          (e.targetTouches.item(1)?.clientY ?? 0),
-      );
-      initialZoom = {
-        x,
-        y,
-      };
-    }
-  }
-  function handleTouchZoom(e: TouchEvent) {
-    if (e.touches.length == 2) {
-      const t0 = e.targetTouches.item(0)!;
-      const t1 = e.targetTouches.item(1)!;
-      const mx = (t0.clientX + t1.clientX) / 2;
-      const my = (t0.clientY + t1.clientY) / 2;
-      const dx = t0.clientX - t1.clientX;
-      const dy = t0.clientY - t1.clientY;
-      const dist = Math.hypot(dx, dy);
-      const zoomIn = dist > initialZoom.x;
-      zoomAtPoint(mx, my, zoomIn ? zoomStep : 1 / zoomStep);
-    }
-  }
-  function handleTouchEnd() {
-    initialZoom = {
-      x: 0,
-      y: 0,
-    };
-  }
 
+  let tracker = new GestureTracker();
   let isPanning = $state(false);
-  let panStart = { x: 0, y: 0 };
-  let panStartOffset = { x: 0, y: 0 };
+  let lastPinchDist = 0;
+  let singlePanStart = { x: 0, y: 0 };
+  let singlePanStartOffset = { x: 0, y: 0 };
 
-  function onPointerDown(e: MouseEvent) {
-    isPanning = true;
-    panStart = { x: e.clientX, y: e.clientY };
-    panStartOffset = { x: offsetX, y: offsetY };
+  function handlePointerDown(e: PointerEvent) {
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    tracker.addPointer(e.pointerId, e.clientX, e.clientY);
+    if (tracker.getPointerCount() === 1) {
+      isPanning = true;
+      singlePanStart = { x: e.clientX, y: e.clientY };
+      singlePanStartOffset = { x: offsetX, y: offsetY };
+    } else if (tracker.getPointerCount() === 2) {
+      isPanning = false;
+      const pinch = tracker.getPinchInfo();
+      lastPinchDist = pinch.distance;
+    }
   }
-  function onPointerMove(e: MouseEvent) {
-    if (!isPanning) return;
-    const canvas = document.querySelector(".graph-canvas");
-    const rect = canvas?.getBoundingClientRect();
-    const ratio = rect ? rect.width / (canvas as HTMLCanvasElement).width : 1;
-    // We adjust pan relative to actual canvas CSS width/height ratio if needed, or simply 1:1 delta
-    offsetX = panStartOffset.x + (e.clientX - panStart.x) * PAN_ACCEL;
-    offsetY = panStartOffset.y + (e.clientY - panStart.y) * PAN_ACCEL;
+
+  function handlePointerMove(e: PointerEvent) {
+    tracker.updatePointer(e.pointerId, e.clientX, e.clientY);
+    const count = tracker.getPointerCount();
+    if (count === 2) {
+      const pinch = tracker.getPinchInfo();
+      if (lastPinchDist > 0 && pinch.distance > 0) {
+        const factor = pinch.distance / lastPinchDist;
+        zoomAtPoint(pinch.center.x, pinch.center.y, 1 / Math.pow(factor, 0.5));
+        lastPinchDist = pinch.distance;
+      }
+    } else if (count === 1 && isPanning) {
+      offsetX = singlePanStartOffset.x + (e.clientX - singlePanStart.x) * PAN_ACCEL;
+      offsetY = singlePanStartOffset.y + (e.clientY - singlePanStart.y) * PAN_ACCEL;
+    }
   }
-  function onPointerUp(e: MouseEvent) {
-    isPanning = false;
+
+  function handlePointerUp(e: PointerEvent) {
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+    tracker.removePointer(e.pointerId);
+    if (tracker.getPointerCount() < 2) {
+      lastPinchDist = 0;
+    }
+    if (tracker.getPointerCount() === 0) {
+      isPanning = false;
+    }
   }
+
 
   function resetView() {
     scale = 50;
@@ -196,13 +184,10 @@
   <main
     class="graph-main"
     onwheel={handleWheel}
-    ontouchstart={handleTouchZoomStart}
-    ontouchmove={handleTouchZoom}
-    ontouchend={handleTouchEnd}
-    onpointerdown={onPointerDown}
-    onpointermove={onPointerMove}
-    onpointerup={onPointerUp}
-    onpointerleave={onPointerUp}
+    onpointerdown={handlePointerDown}
+    onpointermove={handlePointerMove}
+    onpointerup={handlePointerUp}
+    onpointerleave={handlePointerUp}
   >
     {#if engineReady}
       <GraphCanvas

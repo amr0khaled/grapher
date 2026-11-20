@@ -76,6 +76,32 @@ function niceStep(raw: number): number {
   return Math.max(1, Math.round(step));
 }
 
+export interface PinnedAxis {
+  axisX: number;
+  axisY: number;
+  labelAlignX: "left" | "right" | "center";
+  labelAlignY: "top" | "bottom" | "middle";
+}
+
+export function getPinnedAxisPositions(
+  offsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+  padding: number
+): PinnedAxis {
+  const axisX = Math.max(padding, Math.min(width - padding, offsetX));
+  const axisY = Math.max(padding, Math.min(height - padding, offsetY));
+
+  const labelAlignX: "left" | "right" | "center" =
+    offsetX < padding ? "left" : offsetX > width - padding ? "right" : "left";
+
+  const labelAlignY: "top" | "bottom" | "middle" =
+    offsetY < padding ? "top" : offsetY > height - padding ? "bottom" : "middle";
+
+  return { axisX, axisY, labelAlignX, labelAlignY };
+}
+
 export function generateGridLines(
   scale: number,
   offset: number,

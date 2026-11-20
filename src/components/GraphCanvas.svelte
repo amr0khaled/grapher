@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { sampleToPath2D, generateGridLines } from "../utils/math";
+  import { sampleToPath2D, generateGridLines, getPinnedAxisPositions } from "../utils/math";
+  import { preserveCenterOnResize } from "../utils/viewport";
   import type { ExpressionLine } from "../types.ts";
 
   let {
     expressions,
     scale,
-    offsetX,
-    offsetY,
+    offsetX = $bindable(0),
+    offsetY = $bindable(0),
     showGrid,
     darkMode,
   }: {
@@ -39,6 +40,9 @@
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
+          const newOffsets = preserveCenterOnResize(cssWidth, cssHeight, width, height, scale, offsetX, offsetY);
+          offsetX = newOffsets.offsetX;
+          offsetY = newOffsets.offsetY;
           cssWidth = width;
           cssHeight = height;
           renderPrecise();
@@ -66,6 +70,8 @@
     ctx.fillRect(0, 0, cssWidth, cssHeight);
 
     if (showGrid) {
+      const { axisX, axisY } = getPinnedAxisPositions(curOffsetX, curOffsetY, cssWidth, cssHeight, 20);
+
       const xLines = generateGridLines(curScale, curOffsetX, cssWidth);
       for (const line of xLines) {
         ctx.beginPath();
@@ -80,7 +86,7 @@
           ctx.font = "bold 11px sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "alphabetic";
-          const labelY = curOffsetY < 15 ? 15 : curOffsetY > cssHeight - 15 ? cssHeight - 15 : curOffsetY - 5;
+          const labelY = axisY < 25 ? 25 : axisY > cssHeight - 25 ? cssHeight - 15 : axisY - 5;
           ctx.fillText(String(line.label), line.pos, labelY);
         }
       }
@@ -97,9 +103,9 @@
         if (line.isMajor) {
           ctx.fillStyle = mutedCol;
           ctx.font = "bold 11px sans-serif";
-          ctx.textAlign = curOffsetX < 25 ? "left" : curOffsetX > cssWidth - 15 ? "right" : "left";
+          ctx.textAlign = axisX < 35 ? "left" : axisX > cssWidth - 35 ? "right" : "left";
           ctx.textBaseline = "middle";
-          const labelX = curOffsetX < 25 ? 25 : curOffsetX > cssWidth - 15 ? cssWidth - 15 : curOffsetX + 5;
+          const labelX = axisX < 35 ? 30 : axisX > cssWidth - 35 ? cssWidth - 30 : axisX + 6;
           ctx.fillText(String(-line.label), labelX, line.pos);
         }
       }
@@ -108,10 +114,11 @@
     ctx.beginPath();
     ctx.strokeStyle = axisCol;
     ctx.lineWidth = 1.5;
-    ctx.moveTo(0, Math.floor(curOffsetY) + 0.5);
-    ctx.lineTo(cssWidth, Math.floor(curOffsetY) + 0.5);
-    ctx.moveTo(Math.floor(curOffsetX) + 0.5, 0);
-    ctx.lineTo(Math.floor(curOffsetX) + 0.5, cssHeight);
+    const { axisX, axisY } = getPinnedAxisPositions(curOffsetX, curOffsetY, cssWidth, cssHeight, 0);
+    ctx.moveTo(0, Math.floor(axisY) + 0.5);
+    ctx.lineTo(cssWidth, Math.floor(axisY) + 0.5);
+    ctx.moveTo(Math.floor(axisX) + 0.5, 0);
+    ctx.lineTo(Math.floor(axisX) + 0.5, cssHeight);
     ctx.stroke();
   }
 
