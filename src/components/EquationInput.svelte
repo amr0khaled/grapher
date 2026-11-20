@@ -34,6 +34,16 @@
     | null = null;
 
   onMount(() => {
+    // Intercept back button when MathLive virtual keyboard is open
+    const handlePopState = (e: PopStateEvent) => {
+      // @ts-ignore
+      if (window.mathVirtualKeyboard?.visible) {
+        // @ts-ignore
+        window.mathVirtualKeyboard.hide();
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+
     if (mathFieldEl) {
       mathFieldEl.inlineShortcuts = {
         ...mathFieldEl.inlineShortcuts,
@@ -60,6 +70,10 @@
         }
       });
     }
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
   });
 
   $effect(() => {
@@ -102,7 +116,7 @@
     class="eq-input"
     class:eq-error={isError}
     smart-fence="true"
-    math-virtual-keyboard-policy="off"
+    math-virtual-keyboard-policy="auto"
     virtual-keyboard-name="numeric-only"
   ></math-field>
 </div>
@@ -122,15 +136,28 @@
     min-height: 20px;
   }
   .color-picker {
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
     width: 24px;
     height: 24px;
-    border: none;
     border-radius: 50%;
-    aspect-ratio: 1 / 1;
-    padding: 0;
+    overflow: hidden;
     cursor: pointer;
     background: none;
+    padding: 0;
     flex-shrink: 0;
+  }
+  .color-picker::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  .color-picker::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+  }
+  .color-picker::-moz-color-swatch {
+    border: none;
+    border-radius: 50%;
   }
   .eq-number {
     min-width: 24px;

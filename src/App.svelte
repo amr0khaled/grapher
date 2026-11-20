@@ -245,12 +245,14 @@
       <div class="loading">Loading Engine…</div>
     {/if}
     <div class="zoom-controls">
-      <button
-        class="sidebar-toggle"
-        onclick={() => (showSidebar = !showSidebar)}
-        title="Toggle Sidebar"
-        aria-label="Toggle Sidebar">☰</button
-      >
+      {#if layoutMode !== 'mobile'}
+        <button
+          class="sidebar-toggle"
+          onclick={() => (showSidebar = !showSidebar)}
+          title="Toggle Sidebar"
+          aria-label="Toggle Sidebar">☰</button
+        >
+      {/if}
       <button
         class="settings-btn"
         onclick={() => (showSettings = !showSettings)}
@@ -278,7 +280,7 @@
       onResetView={resetView}
     />
     {#if layoutMode === 'mobile'}
-      <BottomSheet>
+      <BottomSheet bind:activeSnap={bottomSheetSnap}>
         <EquationList
           {expressions}
           {addLine}

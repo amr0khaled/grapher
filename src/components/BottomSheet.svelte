@@ -53,6 +53,7 @@
   let lastY = 0;
   let lastTime = 0;
   let velocity = 0;
+  let totalDragDistance = 0;
 
   function onPointerDown(e: PointerEvent) {
     e.stopPropagation();
@@ -62,6 +63,7 @@
     lastY = e.clientY;
     lastTime = e.timeStamp;
     velocity = 0;
+    totalDragDistance = 0;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
@@ -69,6 +71,7 @@
     e.stopPropagation();
     if (!dragging) return;
     const dy = e.clientY - dragStartY;
+    totalDragDistance = Math.abs(dy);
     const targetY = dragStartTranslateY + dy;
     const minY = 56; // full
     const maxY = window.innerHeight - 80; // peek
@@ -86,6 +89,11 @@
     e.stopPropagation();
     if (!dragging) return;
     dragging = false;
+
+    // If user tapped without dragging, let handleHandleClick handle it
+    if (totalDragDistance <= 6) {
+      return;
+    }
 
     const VELOCITY_THRESHOLD = 0.5;
     let target: SnapPoint;
@@ -106,7 +114,8 @@
     activeSnap = target;
   }
 
-  function handleHandleClick() {
+  function handleHandleClick(e: MouseEvent) {
+    if (totalDragDistance > 6) return;
     if (activeSnap === "peek") {
       activeSnap = "half";
     } else if (activeSnap === "half") {
@@ -117,11 +126,8 @@
   }
 
   function onFocusIn(e: FocusEvent) {
-    if (activeSnap !== "full") {
-      activeSnap = "full";
-    }
     const target = e.target as HTMLElement;
-    if (target.closest('.equation-row')) {
+    if (target && target.closest('.equation-row')) {
       target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
@@ -150,6 +156,7 @@
 <div
   class="bottom-sheet"
   class:dragging
+  class:peek-mode={activeSnap === "peek"}
   style:transform="translateY({computedTranslateY}px)"
   style:bottom="{keyboardOffset}px"
 >
@@ -188,6 +195,9 @@
   }
   .bottom-sheet.dragging {
     transition: none;
+  }
+  .bottom-sheet.peek-mode .sheet-body {
+    pointer-events: none;
   }
   .drag-handle {
     display: flex;
