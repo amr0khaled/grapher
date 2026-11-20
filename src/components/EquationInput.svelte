@@ -28,6 +28,10 @@
 
   onMount(() => {
     if (mathFieldEl) {
+      mathFieldEl.inlineShortcuts = {
+        ...mathFieldEl.inlineShortcuts,
+        sinc: "\\operatorname{sinc}",
+      };
       mathFieldEl.value = value;
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
@@ -152,4 +156,3 @@
     white-space: nowrap;
   }
 </style>
-
