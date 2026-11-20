@@ -5,17 +5,37 @@
   import SettingsCard from "./components/SettingsCard.svelte";
   import BottomSheet from "./components/BottomSheet.svelte";
   import EquationList from "./components/EquationList.svelte";
+  import ShortcutModal from "./components/ShortcutModal.svelte";
   import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
   import { evaluateSymbols } from "./utils/math";
   import { resolveLayoutMode } from "./utils/device.svelte";
-  import type { ExpressionLine } from "./types.ts";
+  import type { ExpressionLine, LatexImage } from "./types.ts";
   import { GestureTracker } from "./utils/gestureController";
+  import { saveState, decodeShareUrl, encodeShareUrl } from "./utils/storage";
+  import { latexToImage } from "./utils/png";
 
-  let expressions = $state<ExpressionLine[]>([
-    { expression: "", color: generateColor(0), visible: true },
-    { expression: "", color: generateColor(1), visible: true },
-  ]);
+  let expressions = $state<ExpressionLine[]>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.expressions) return shared.expressions;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.expressions) return parsed.expressions;
+          } catch {}
+        }
+      }
+      return [
+        { expression: "", color: generateColor(0), visible: true },
+        { expression: "", color: generateColor(1), visible: true },
+      ];
+    })(),
+  );
 
   // Symbol table derived from assignment lines (top-down evaluation via WASM).
   let symbols = $derived.by(() => {
@@ -28,14 +48,20 @@
     errorStates = expressions.map((expr, i) => {
       const text = expr.expression.trim();
       if (text === "") return false;
-      const isAssignmentOrFunc = /^\s*[a-zA-Z_]\w*\s*=/.test(text) || /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
+      const isAssignmentOrFunc =
+        /^\s*[a-zA-Z_]\w*\s*=/.test(text) ||
+        /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
       return !isAssignmentOrFunc && paths[i] === null;
     });
   }
 
   // --- View state ---
-  let windowWidth = $state(typeof window !== "undefined" ? window.innerWidth : 800);
-  let windowHeight = $state(typeof window !== "undefined" ? window.innerHeight : 600);
+  let windowWidth = $state(
+    typeof window !== "undefined" ? window.innerWidth : 800,
+  );
+  let windowHeight = $state(
+    typeof window !== "undefined" ? window.innerHeight : 600,
+  );
 
   onMount(() => {
     const handleResize = () => {
@@ -47,15 +73,100 @@
   });
 
   let layoutMode = $derived(
-    resolveLayoutMode(windowWidth, windowHeight, typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches, typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches)
+    resolveLayoutMode(
+      windowWidth,
+      windowHeight,
+      typeof window !== "undefined" &&
+        window.matchMedia("(hover: hover)").matches,
+      typeof window !== "undefined" &&
+        window.matchMedia("(pointer: fine)").matches,
+    ),
   );
 
-  let scale = $state(100);
-  let offsetX = $state(400);
-  let offsetY = $state(300);
-  let showGrid = $state(true);
-  let darkMode = $state(true);
+  let scale = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.scale) return shared.scale;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.scale) return parsed.scale;
+          } catch {}
+        }
+      }
+      return 100;
+    })(),
+  );
+  let offsetX = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.offsetX) return shared.offsetX;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.offsetX) return parsed.offsetX;
+          } catch {}
+        }
+      }
+      return 400;
+    })(),
+  );
+  let offsetY = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.offsetY) return shared.offsetY;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.offsetY) return parsed.offsetY;
+          } catch {}
+        }
+      }
+      return 300;
+    })(),
+  );
+  let showGrid = $state<boolean>(
+    (() => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.showGrid !== undefined) return parsed.showGrid;
+          } catch {}
+        }
+      }
+      return true;
+    })(),
+  );
+  let darkMode = $state<boolean>(
+    (() => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.darkMode !== undefined) return parsed.darkMode;
+          } catch {}
+        }
+      }
+      return true;
+    })(),
+  );
   let showSettings = $state(false);
+  let showShortcutModal = $state(false);
   let showSidebar = $state(false);
   let engineReady = $state(false);
   let zoomStep = $state(1.12);
@@ -128,8 +239,8 @@
   let bottomSheetSnap = $state<"peek" | "half" | "full">("half");
 
   function handlePointerDown(e: PointerEvent) {
-    if (layoutMode === 'mobile') {
-      bottomSheetSnap = 'peek';
+    if (layoutMode === "mobile") {
+      bottomSheetSnap = "peek";
     }
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     tracker.addPointer(e.pointerId, e.clientX, e.clientY);
@@ -155,8 +266,10 @@
         lastPinchDist = pinch.distance;
       }
     } else if (count === 1 && isPanning) {
-      offsetX = singlePanStartOffset.x + (e.clientX - singlePanStart.x) * PAN_ACCEL;
-      offsetY = singlePanStartOffset.y + (e.clientY - singlePanStart.y) * PAN_ACCEL;
+      offsetX =
+        singlePanStartOffset.x + (e.clientX - singlePanStart.x) * PAN_ACCEL;
+      offsetY =
+        singlePanStartOffset.y + (e.clientY - singlePanStart.y) * PAN_ACCEL;
     }
   }
 
@@ -173,7 +286,6 @@
     }
   }
 
-
   function resetView() {
     scale = 50;
     const canvas = document.querySelector(".graph-canvas");
@@ -186,7 +298,160 @@
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
   });
 
+  $effect(() => {
+    // Autosave state on change
+    saveState({
+      expressions,
+      scale,
+      offsetX,
+      offsetY,
+      showGrid,
+      darkMode,
+    });
+  });
+
+  async function shareUrl() {
+    const hash = encodeShareUrl({
+      expressions,
+      scale,
+      offsetX,
+      offsetY,
+      showGrid,
+      darkMode,
+    });
+    const url = `${window.location.origin}${window.location.pathname}#${hash}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Grapher Plot", url });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard.writeText(url);
+    alert("Share URL copied to clipboard!");
+  }
+
+  async function exportPng() {
+    const canvas = document.querySelector(
+      ".graph-canvas",
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = darkMode ? "#0f172a" : "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+
+    const validExprs = expressions.filter((e) => e.expression.trim() !== "");
+    if (validExprs.length > 0) {
+      const textColor = darkMode ? "#e2e8f0" : "#1e293b";
+      const padding = 12;
+      const maxContentW = 320;
+
+      // Render LaTeX -> images (null = fall back to plain text)
+      const rendered: (LatexImage | null)[] = await Promise.all(
+        validExprs.map((e) =>
+          latexToImage(e.expression, textColor, 16, maxContentW).catch((e) => {
+            console.error("latexToImage failed:", e);
+            return null;
+          }),
+        ),
+      );
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.font = "13px sans-serif";
+
+      const rowH = Math.max(24, ...rendered.map((r) => (r ? r.height + 8 : 0)));
+      const contentW = Math.max(
+        ...rendered.map((r, i) =>
+          r
+            ? r.width
+            : Math.min(
+                ctx.measureText(validExprs[i].expression).width,
+                maxContentW,
+              ),
+        ),
+      );
+      const boxWidth = contentW + 44;
+      const boxHeight = padding * 2 + validExprs.length * rowH;
+      const boxX = canvas.width / dpr - boxWidth - 20;
+      const boxY = 20;
+
+      ctx.fillStyle = darkMode
+        ? "rgba(30, 41, 59, 0.9)"
+        : "rgba(255, 255, 255, 0.9)";
+      ctx.strokeStyle = darkMode ? "#334155" : "#e2e8f0";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textBaseline = "middle";
+      validExprs.forEach((expr, i) => {
+        const itemY = boxY + padding + i * rowH + rowH / 2;
+
+        ctx.fillStyle = expr.color;
+        ctx.fillRect(boxX + 12, itemY - 6, 12, 12);
+
+        const r = rendered[i];
+        if (r) {
+          ctx.drawImage(
+            r.img,
+            boxX + 32,
+            itemY - r.height / 2,
+            r.width,
+            r.height,
+          );
+        } else {
+          ctx.fillStyle = textColor;
+          ctx.fillText(expr.expression, boxX + 32, itemY, maxContentW);
+        }
+      });
+      ctx.restore();
+    }
+
+    exportCanvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], "graph.png", { type: "image/png" });
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+        try {
+          await navigator.share({ files: [file], title: "Grapher Plot" });
+          return;
+        } catch {}
+      }
+      const a = document.createElement("a");
+      a.download = "graph.png";
+      a.href = URL.createObjectURL(blob);
+      a.click();
+    }, "image/png");
+  }
+
+  function triggerHaptic() {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+  }
+
   onMount(async () => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement).tagName === 'MATH-FIELD' || (e.target as HTMLElement).tagName === 'INPUT') return;
+      if (e.key === "?") {
+        showShortcutModal = !showShortcutModal;
+        triggerHaptic();
+      }
+    };
+    window.addEventListener("keydown", handleKeydown);
     try {
       await initEngine();
       engineReady = true;
@@ -209,8 +474,12 @@
   });
 </script>
 
-<div class="grapher-layout" class:dark={darkMode} class:mobile={layoutMode === 'mobile'}>
-  {#if layoutMode !== 'mobile'}
+<div
+  class="grapher-layout"
+  class:dark={darkMode}
+  class:mobile={layoutMode === "mobile"}
+>
+  {#if layoutMode !== "mobile"}
     {#if showSidebar}
       <div
         class="sidebar-scrim"
@@ -218,7 +487,9 @@
         tabindex="0"
         aria-label="Close sidebar"
         onclick={() => (showSidebar = false)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") showSidebar = false;
+        }}
       ></div>
     {/if}
 
@@ -257,7 +528,7 @@
       <div class="loading">Loading Engine…</div>
     {/if}
     <div class="zoom-controls">
-      {#if layoutMode !== 'mobile'}
+      {#if layoutMode !== "mobile"}
         <button
           class="sidebar-toggle"
           onclick={() => (showSidebar = !showSidebar)}
@@ -271,17 +542,27 @@
         title="Settings"
         aria-label="Toggle settings">⚙️</button
       >
-      <button onclick={() => {
-        const canvas = document.querySelector(".graph-canvas");
-        const rect = canvas?.getBoundingClientRect();
-        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, ZOOM_BUTTON_STEP);
-      }}>+</button
+      <button
+        onclick={() => {
+          const canvas = document.querySelector(".graph-canvas");
+          const rect = canvas?.getBoundingClientRect();
+          zoomAtPoint(
+            (rect?.left ?? 0) + (rect?.width ?? 800) / 2,
+            (rect?.top ?? 0) + (rect?.height ?? 600) / 2,
+            ZOOM_BUTTON_STEP,
+          );
+        }}>+</button
       >
-      <button onclick={() => {
-        const canvas = document.querySelector(".graph-canvas");
-        const rect = canvas?.getBoundingClientRect();
-        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, 1 / ZOOM_BUTTON_STEP);
-      }}>-</button
+      <button
+        onclick={() => {
+          const canvas = document.querySelector(".graph-canvas");
+          const rect = canvas?.getBoundingClientRect();
+          zoomAtPoint(
+            (rect?.left ?? 0) + (rect?.width ?? 800) / 2,
+            (rect?.top ?? 0) + (rect?.height ?? 600) / 2,
+            1 / ZOOM_BUTTON_STEP,
+          );
+        }}>-</button
       >
     </div>
     <SettingsCard
@@ -290,8 +571,11 @@
       bind:zoomStep
       bind:visible={showSettings}
       onResetView={resetView}
+      onShareUrl={shareUrl}
+      onExportPng={exportPng}
     />
-    {#if layoutMode === 'mobile'}
+    <ShortcutModal bind:visible={showShortcutModal} />
+    {#if layoutMode === "mobile"}
       <BottomSheet bind:activeSnap={bottomSheetSnap}>
         <EquationList
           {expressions}

@@ -55,10 +55,10 @@
       mathFieldEl.addEventListener("focus", () => {
         // @ts-ignore
         if (showMathKeyboard) {
-          navigator?.virtualKeyboard?.hide?.();
+          (navigator as any)?.virtualKeyboard?.hide?.();
           window.mathVirtualKeyboard?.show?.();
         } else {
-          navigator?.virtualKeyboard?.show?.();
+          (navigator as any)?.virtualKeyboard?.show?.();
           window.mathVirtualKeyboard?.hide?.();
         }
       });

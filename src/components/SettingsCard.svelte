@@ -5,12 +5,16 @@
     zoomStep = $bindable(1.12),
     visible = $bindable(false),
     onResetView,
+    onShareUrl,
+    onExportPng,
   }: {
     showGrid?: boolean;
     darkMode?: boolean;
     zoomStep?: number;
     visible?: boolean;
     onResetView?: () => void;
+    onShareUrl?: () => void;
+    onExportPng?: () => void;
   } = $props();
 </script>
 
@@ -60,8 +64,24 @@
     </div>
 
     {#if typeof onResetView === "function"}
-      <button class="reset-btn" onclick={() => onResetView()}>Reset view</button
-      >
+      <button class="reset-btn" onclick={() => {
+        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
+        onResetView();
+      }}>Reset view</button>
+    {/if}
+
+    {#if typeof onShareUrl === "function"}
+      <button class="action-btn" onclick={() => {
+        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
+        onShareUrl();
+      }}>Share Graph URL</button>
+    {/if}
+
+    {#if typeof onExportPng === "function"}
+      <button class="action-btn" onclick={() => {
+        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
+        onExportPng();
+      }}>Export PNG</button>
     {/if}
   </div>
 {/if}
@@ -135,7 +155,8 @@
     width: 100%;
     cursor: pointer;
   }
-  .reset-btn {
+  .reset-btn,
+  .action-btn {
     margin-top: 0.6rem;
     width: 100%;
     padding: 0.4rem;
@@ -146,7 +167,8 @@
     font-size: 0.85rem;
     color: var(--fg);
   }
-  .reset-btn:hover {
+  .reset-btn:hover,
+  .action-btn:hover {
     background: var(--border);
   }
 </style>

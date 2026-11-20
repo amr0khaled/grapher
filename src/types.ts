@@ -9,3 +9,9 @@ export interface GridLine {
   label: number;
   isMajor: boolean;
 }
+
+export interface LatexImage {
+  img: HTMLImageElement;
+  width: number; // CSS px
+  height: number;
+}
