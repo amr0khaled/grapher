@@ -4,14 +4,6 @@
 
   type SnapPoint = "peek" | "half" | "full";
 
-  const SNAP_HEIGHTS: Record<SnapPoint, string> = {
-    peek: "72px",
-    half: "45vh",
-    full: "calc(100dvh - 56px)",
-  };
-
-  const SNAP_ORDER: SnapPoint[] = ["peek", "half", "full"];
-
   let {
     activeSnap = $bindable<SnapPoint>("half"),
     onCanvasTap,
@@ -22,97 +14,126 @@
     children: Snippet;
   } = $props();
 
-  let sheetEl: HTMLDivElement | null = null;
   let dragging = $state(false);
   let dragStartY = 0;
-  let dragStartHeight = 0;
+  let dragStartTranslateY = 0;
   let currentTranslateY = $state(0);
   let keyboardOffset = $state(0);
 
-  function getSnapHeightPx(snap: SnapPoint): number {
+  function getSnapTranslateY(snap: SnapPoint): number {
+    const h = window.innerHeight;
     switch (snap) {
-      case "peek": return 72;
-      case "half": return window.innerHeight * 0.45;
-      case "full": return window.innerHeight - 56;
+      case "peek":
+        return h - 80;
+      case "half":
+        return h * 0.55;
+      case "full":
+        return 56;
     }
   }
 
-  function nearestSnap(heightPx: number): SnapPoint {
-    let best: SnapPoint = "peek";
-    let bestDist = Infinity;
-    for (const s of SNAP_ORDER) {
-      const d = Math.abs(heightPx - getSnapHeightPx(s));
-      if (d < bestDist) { bestDist = d; best = s; }
+  function nearestSnap(translateY: number): SnapPoint {
+    const snaps: { snap: SnapPoint; y: number }[] = [
+      { snap: "peek", y: getSnapTranslateY("peek") },
+      { snap: "half", y: getSnapTranslateY("half") },
+      { snap: "full", y: getSnapTranslateY("full") },
+    ];
+    let best = snaps[0];
+    let minDiff = Infinity;
+    for (const s of snaps) {
+      const diff = Math.abs(translateY - s.y);
+      if (diff < minDiff) {
+        minDiff = diff;
+        best = s;
+      }
     }
-    return best;
+    return best.snap;
   }
 
-  let lastPointerY = 0;
-  let lastPointerTime = 0;
+  let lastY = 0;
+  let lastTime = 0;
   let velocity = 0;
 
   function onPointerDown(e: PointerEvent) {
+    e.stopPropagation();
     dragging = true;
     dragStartY = e.clientY;
-    dragStartHeight = getSnapHeightPx(activeSnap);
-    lastPointerY = e.clientY;
-    lastPointerTime = e.timeStamp;
+    dragStartTranslateY = getSnapTranslateY(activeSnap);
+    lastY = e.clientY;
+    lastTime = e.timeStamp;
     velocity = 0;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   }
 
   function onPointerMove(e: PointerEvent) {
+    e.stopPropagation();
     if (!dragging) return;
-    const dy = dragStartY - e.clientY;
-    const newHeight = dragStartHeight + dy;
-    const maxH = getSnapHeightPx("full");
-    const clamped = Math.max(40, Math.min(maxH, newHeight));
-    currentTranslateY = getSnapHeightPx(activeSnap) - clamped;
+    const dy = e.clientY - dragStartY;
+    const targetY = dragStartTranslateY + dy;
+    const minY = 56; // full
+    const maxY = window.innerHeight - 80; // peek
+    currentTranslateY = Math.max(minY, Math.min(maxY, targetY));
 
-    const dt = e.timeStamp - lastPointerTime;
+    const dt = e.timeStamp - lastTime;
     if (dt > 0) {
-      velocity = (lastPointerY - e.clientY) / dt;
+      velocity = (e.clientY - lastY) / dt;
     }
-    lastPointerY = e.clientY;
-    lastPointerTime = e.timeStamp;
+    lastY = e.clientY;
+    lastTime = e.timeStamp;
   }
 
-  function onPointerUp(_e: PointerEvent) {
+  function onPointerUp(e: PointerEvent) {
+    e.stopPropagation();
     if (!dragging) return;
     dragging = false;
 
-    const currentHeight = getSnapHeightPx(activeSnap) - currentTranslateY;
-    const VELOCITY_THRESHOLD = 0.4;
-
+    const VELOCITY_THRESHOLD = 0.5;
     let target: SnapPoint;
+
     if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
-      // Fast swipe: snap in swipe direction
-      const idx = SNAP_ORDER.indexOf(activeSnap);
       if (velocity > 0) {
-        target = SNAP_ORDER[Math.min(idx + 1, SNAP_ORDER.length - 1)];
+        // swipe down
+        target = activeSnap === "full" ? "half" : "peek";
       } else {
-        target = SNAP_ORDER[Math.max(idx - 1, 0)];
+        // swipe up
+        target = activeSnap === "peek" ? "half" : "full";
       }
     } else {
-      target = nearestSnap(currentHeight);
+      target = nearestSnap(currentTranslateY);
     }
 
     currentTranslateY = 0;
     activeSnap = target;
   }
 
-  // VisualViewport keyboard adjustment
+  function handleHandleClick() {
+    if (activeSnap === "peek") {
+      activeSnap = "half";
+    } else if (activeSnap === "half") {
+      activeSnap = "full";
+    } else {
+      activeSnap = "peek";
+    }
+  }
+
+  function onFocusIn(e: FocusEvent) {
+    if (activeSnap !== "full") {
+      activeSnap = "full";
+    }
+    const target = e.target as HTMLElement;
+    if (target.closest('.equation-row')) {
+      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
   onMount(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-
     function onResize() {
       const vv = window.visualViewport;
       if (!vv) return;
-      const offset = window.innerHeight - vv.height - vv.offsetTop;
-      keyboardOffset = Math.max(0, offset);
+      keyboardOffset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
     }
-
     vv.addEventListener("resize", onResize);
     vv.addEventListener("scroll", onResize);
     return () => {
@@ -120,27 +141,30 @@
       vv.removeEventListener("scroll", onResize);
     };
   });
+
+  let computedTranslateY = $derived(
+    dragging ? currentTranslateY : getSnapTranslateY(activeSnap)
+  );
 </script>
 
 <div
-  bind:this={sheetEl}
   class="bottom-sheet"
   class:dragging
-  data-snap={activeSnap}
-  style:height={SNAP_HEIGHTS[activeSnap]}
+  style:transform="translateY({computedTranslateY}px)"
   style:bottom="{keyboardOffset}px"
-  style:transform="translateY({currentTranslateY}px)"
 >
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="drag-handle"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
+    onclick={handleHandleClick}
   >
     <div class="handle-bar"></div>
   </div>
-  <div class="sheet-body">
+  <div class="sheet-body" onfocusin={onFocusIn}>
     {@render children()}
   </div>
 </div>
@@ -148,9 +172,10 @@
 <style>
   .bottom-sheet {
     position: fixed;
-    bottom: 0;
+    top: 0;
     left: 0;
     right: 0;
+    height: 100dvh;
     z-index: 30;
     background: var(--panel);
     border-radius: 16px 16px 0 0;
@@ -158,9 +183,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    will-change: transform, height;
-    transition: transform 300ms cubic-bezier(0.2, 0, 0, 1),
-                height 300ms cubic-bezier(0.2, 0, 0, 1);
+    will-change: transform;
+    transition: transform 300ms cubic-bezier(0.2, 0, 0, 1);
   }
   .bottom-sheet.dragging {
     transition: none;
@@ -169,7 +193,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 10px 0 6px;
+    padding: 12px 0 8px;
     cursor: grab;
     touch-action: none;
     flex-shrink: 0;

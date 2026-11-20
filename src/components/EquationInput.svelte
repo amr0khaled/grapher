@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Warning from "./Warning.svelte";
   import { onMount } from "svelte";
   import "mathlive";
 
@@ -25,7 +26,11 @@
   } = $props();
 
   let mathFieldEl:
-    | (HTMLElement & { value?: string; focus?: () => void; inlineShortcuts?: Record<string, string> })
+    | (HTMLElement & {
+        value?: string;
+        focus?: () => void;
+        inlineShortcuts?: Record<string, string>;
+      })
     | null = null;
 
   onMount(() => {
@@ -74,14 +79,23 @@
 </script>
 
 <div class="equation-row">
-  <input
-    type="color"
-    bind:value={color}
-    class="color-picker"
-    aria-label="Line color"
-    oninput={() => onUpdateColor?.(index, color)}
-  />
   <span class="eq-number">{index + 1}</span>
+  {#if isError}
+    <div class="error-wrapper">
+      <Warning class="eq-error-badge" size={20} />
+      <div class="error-popover">Invalid expression or formula syntax</div>
+    </div>
+  {:else if badgeValue !== undefined && badgeValue !== null}
+    <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
+  {:else}
+    <input
+      type="color"
+      bind:value={color}
+      class="color-picker"
+      aria-label="Line color"
+      oninput={() => onUpdateColor?.(index, color)}
+    />
+  {/if}
   <!-- svelte-ignore a11y_no_redundant_roles -->
   <math-field
     bind:this={mathFieldEl}
@@ -91,11 +105,6 @@
     math-virtual-keyboard-policy="off"
     virtual-keyboard-name="numeric-only"
   ></math-field>
-  {#if isError}
-    <span class="eq-error-badge" title="Invalid expression">⚠</span>
-  {:else if badgeValue !== undefined && badgeValue !== null}
-    <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
-  {/if}
 </div>
 
 <style>
@@ -109,39 +118,38 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.5rem 0;
-    min-height: 44px;
+    padding: 0.2rem 0;
+    min-height: 20px;
   }
   .color-picker {
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     border: none;
     border-radius: 50%;
+    aspect-ratio: 1 / 1;
     padding: 0;
     cursor: pointer;
     background: none;
     flex-shrink: 0;
-    min-width: 44px;
-    min-height: 44px;
   }
   .eq-number {
-    width: 24px;
-    min-width: 44px;
-    min-height: 44px;
+    min-width: 24px;
+    min-height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--muted);
+    opacity: 0.6;
     flex-shrink: 0;
   }
   .eq-input {
     flex: 1;
     border: none;
     border-bottom: 1px solid var(--border);
-    padding: 0.3rem 0.2rem;
-    font-size: 1.05rem;
+    font-size: 1.45rem;
+    padding-inline-start: 0.2rem;
     background: transparent;
     color: var(--fg);
     min-width: 60px;
@@ -150,14 +158,31 @@
   .eq-input:focus-within {
     border-bottom-color: var(--accent);
   }
-  .eq-input.eq-error {
-    border-bottom-color: orange;
+  .error-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    cursor: help;
   }
-  .eq-error-badge {
-    align-self: flex-end;
-    font-size: 0.85rem;
-    color: orange;
-    padding: 0 0.35rem;
+  .error-popover {
+    visibility: hidden;
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 50;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .error-wrapper:hover .error-popover,
+  .error-wrapper:active .error-popover {
+    visibility: visible;
   }
   .eq-badge {
     align-self: flex-end;
