@@ -6,6 +6,7 @@
     value = $bindable(""),
     color = $bindable("#388c46"),
     index = 0,
+    isError = false,
     onAddLine,
     onRemoveLine,
     onUpdateExpression,
@@ -15,6 +16,7 @@
     value?: string;
     color?: string;
     index?: number;
+    isError?: boolean;
     onAddLine?: (afterIndex: number) => void;
     onRemoveLine?: (index: number) => void;
     onUpdateExpression?: (index: number, value: string) => void;
@@ -84,11 +86,14 @@
   <math-field
     bind:this={mathFieldEl}
     class="eq-input"
+    class:eq-error={isError}
     smart-fence="true"
     math-virtual-keyboard-policy="off"
     virtual-keyboard-name="numeric-only"
   ></math-field>
-  {#if badgeValue !== undefined && badgeValue !== null}
+  {#if isError}
+    <span class="eq-error-badge" title="Invalid expression">⚠</span>
+  {:else if badgeValue !== undefined && badgeValue !== null}
     <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
   {/if}
 </div>
@@ -144,6 +149,15 @@
   }
   .eq-input:focus-within {
     border-bottom-color: var(--accent);
+  }
+  .eq-input.eq-error {
+    border-bottom-color: orange;
+  }
+  .eq-error-badge {
+    align-self: flex-end;
+    font-size: 0.85rem;
+    color: orange;
+    padding: 0 0.35rem;
   }
   .eq-badge {
     align-self: flex-end;
