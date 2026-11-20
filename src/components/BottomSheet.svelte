@@ -57,6 +57,7 @@
   let totalDragDistance = 0;
 
   function onPointerDown(e: PointerEvent) {
+    if (!(e.target as HTMLElement).closest('.drag-handle')) return;
     e.stopPropagation();
     dragging = true;
     dragStartY = e.clientY;
@@ -149,6 +150,7 @@
   );
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="bottom-sheet"
   class:dragging
@@ -156,6 +158,7 @@
   style:height="{SHEET_HEIGHT}px"
   style:transform="translateY({computedTranslateY}px)"
   style:bottom="{keyboardOffset}px"
+  onpointerdown={(e) => e.stopPropagation()}
 >
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -219,5 +222,6 @@
     overflow-x: hidden;
     padding: 0 12px 12px;
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 </style>

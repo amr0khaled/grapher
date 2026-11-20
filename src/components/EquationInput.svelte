@@ -25,6 +25,7 @@
     symbols?: Record<string, number>;
   } = $props();
 
+  let showMathKeyboard = $state(false);
   let mathFieldEl:
     | (HTMLElement & {
         value?: string;
@@ -34,6 +35,7 @@
     | null = null;
 
   onMount(() => {
+    window.mathVirtualKeyboard.layouts = ["numeric", "symbols", "alphabetic"];
     // Intercept back button when MathLive virtual keyboard is open
     const handlePopState = (e: PopStateEvent) => {
       // @ts-ignore
@@ -50,6 +52,16 @@
         sinc: "\\operatorname{sinc}",
       };
       mathFieldEl.value = value;
+      mathFieldEl.addEventListener("focus", () => {
+        // @ts-ignore
+        if (showMathKeyboard) {
+          navigator?.virtualKeyboard?.hide?.();
+          window.mathVirtualKeyboard?.show?.();
+        } else {
+          navigator?.virtualKeyboard?.show?.();
+          window.mathVirtualKeyboard?.hide?.();
+        }
+      });
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
           value = mathFieldEl.value || "";
@@ -116,8 +128,8 @@
     class="eq-input"
     class:eq-error={isError}
     smart-fence="true"
-    math-virtual-keyboard-policy="auto"
-    virtual-keyboard-name="numeric-only"
+    math-virtual-keyboard-policy="manual"
+    virtualkeyboardpolicy="manual"
   ></math-field>
 </div>
 
@@ -196,7 +208,7 @@
     position: absolute;
     bottom: 125%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translateX(0%);
     background: var(--panel);
     color: var(--fg);
     border: 1px solid var(--border);
@@ -205,7 +217,7 @@
     font-size: 0.75rem;
     white-space: nowrap;
     z-index: 50;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
   .error-wrapper:hover .error-popover,
   .error-wrapper:active .error-popover {
