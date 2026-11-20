@@ -125,7 +125,12 @@
   let singlePanStart = { x: 0, y: 0 };
   let singlePanStartOffset = { x: 0, y: 0 };
 
+  let bottomSheetSnap = $state<"peek" | "half" | "full">("half");
+
   function handlePointerDown(e: PointerEvent) {
+    if (layoutMode === 'mobile') {
+      bottomSheetSnap = 'peek';
+    }
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     tracker.addPointer(e.pointerId, e.clientX, e.clientY);
     if (tracker.getPointerCount() === 1) {
@@ -146,7 +151,7 @@
       const pinch = tracker.getPinchInfo();
       if (lastPinchDist > 0 && pinch.distance > 0) {
         const factor = pinch.distance / lastPinchDist;
-        zoomAtPoint(pinch.center.x, pinch.center.y, 1 / Math.pow(factor, 0.5));
+        zoomAtPoint(pinch.center.x, pinch.center.y, Math.pow(factor, 0.5));
         lastPinchDist = pinch.distance;
       }
     } else if (count === 1 && isPanning) {
