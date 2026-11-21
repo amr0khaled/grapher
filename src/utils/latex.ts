@@ -10,6 +10,17 @@ export function toPlainInfix(latex: string): string {
   out = out.replace(/\\(sqrt|sum|int)\{([^}]+)\}/g, '$1($2)');
   // Cleanup infinity
   out = out.replace(/\\infty/g, 'infinity');
+
+  // Insert implicit multiplication between adjacent single letters (ba -> b*a)
+  // Be careful not to break function names like sin, cos, tan
+  out = out.replace(/\b([a-zA-Z])\s+([a-zA-Z])\b/g, (match, p1, p2) => {
+    const combined = p1 + p2;
+    if (['sin', 'cos', 'tan', 'ln', 'log', 'sqrt'].includes(combined)) {
+      return match;
+    }
+    return `${p1}*${p2}`;
+  });
+
   return out;
 }
 

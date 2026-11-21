@@ -1,33 +1,76 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import "mathlive";
+  import { isDrawable, getEvaluatedValue } from "../utils/math";
+  import { _eval } from "../wasm/grapher_engine.js";
 
   let {
     value = $bindable(""),
     color = $bindable("#388c46"),
+    visible = $bindable(true),
     index = 0,
     onAddLine,
     onRemoveLine,
     onUpdateExpression,
     onUpdateColor,
+    onToggleVisibility,
     symbols = {},
   }: {
     value?: string;
     color?: string;
+    visible?: boolean;
     index?: number;
     onAddLine?: (afterIndex: number) => void;
     onRemoveLine?: (index: number) => void;
     onUpdateExpression?: (index: number, value: string) => void;
     onUpdateColor?: (index: number, color: string) => void;
+    onToggleVisibility?: (index: number) => void;
     symbols?: Record<string, number>;
   } = $props();
 
   let mathFieldEl:
     | (HTMLElement & { value?: string; focus?: () => void })
     | null = null;
+  let colorInputEl: HTMLInputElement | null = null;
+  let longPressTimer: any = null;
+
+  let drawable = $derived(isDrawable(value));
+
+  function handleColorClick() {
+    if (!drawable) return;
+    visible = !visible;
+    onToggleVisibility?.(index);
+  }
+
+  function handleColorDblClick() {
+    colorInputEl?.click();
+  }
+
+  function handleTouchStart() {
+    if (!drawable) return;
+    longPressTimer = setTimeout(() => {
+      colorInputEl?.click();
+    }, 600);
+  }
+
+  function handleTouchEnd() {
+    if (longPressTimer) clearTimeout(longPressTimer);
+  }
 
   onMount(() => {
     if (mathFieldEl) {
+      if ("macros" in mathFieldEl) {
+        mathFieldEl.macros = {
+          ...mathFieldEl.macros,
+          sinc: "\\operatorname{sinc}",
+        };
+      }
+      if ("inlineShortcuts" in mathFieldEl) {
+        mathFieldEl.inlineShortcuts = {
+          ...mathFieldEl["inlineShortcuts"],
+          sinc: "\\operatorname{sinc}",
+        };
+      }
       mathFieldEl.value = value;
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
@@ -56,25 +99,52 @@
       mathFieldEl.value = value;
     }
   });
-
-  let badgeValue = $derived.by(() => {
-    const assignment = value.match(/^\s*[a-zA-Z_]\w*\s*=\s*(.+)$/);
-    if (assignment) {
-      const m = value.match(/^\s*([a-zA-Z_]\w*)/);
-      return m ? symbols[m[1]] : null;
+  let evaluation = $derived.by(() => {
+    const simpleVal = getEvaluatedValue(value, symbols);
+    if (simpleVal !== null) {
+      return { value: simpleVal, error: null };
     }
-    return null;
+
+    try {
+      return { value: _eval(value, 0, 0), error: null };
+    } catch (e) {
+      return {
+        value: null,
+        error: e instanceof Error ? e.message : "Evaluation error",
+      };
+    }
   });
+  let badgeValue = $derived(evaluation.value);
+  let errorMessage = $derived<string | null>(evaluation.error);
 </script>
 
 <div class="equation-row">
-  <input
-    type="color"
-    bind:value={color}
-    class="color-picker"
-    aria-label="Line color"
-    oninput={() => onUpdateColor?.(index, color)}
-  />
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+  <div
+    class="color-picker-wrapper"
+    class:hidden={!drawable}
+    style="background-color: {visible
+      ? color
+      : 'transparent'}; border: 2px solid {color};"
+    onclick={handleColorClick}
+    ondblclick={handleColorDblClick}
+    ontouchstart={handleTouchStart}
+    ontouchend={handleTouchEnd}
+    role="button"
+    tabindex="0"
+    onkeydown={(e) => {
+      if (e.key === "Enter" || e.key === " ") handleColorClick();
+    }}
+    aria-label="Toggle visibility or change color"
+  >
+    <input
+      bind:this={colorInputEl}
+      type="color"
+      bind:value={color}
+      class="native-color-picker"
+      oninput={() => onUpdateColor?.(index, color)}
+    />
+  </div>
   <span class="eq-number">{index + 1}</span>
   <!-- svelte-ignore a11y_no_redundant_roles -->
   <math-field
@@ -84,7 +154,7 @@
     math-virtual-keyboard-policy="off"
     virtual-keyboard-name="numeric-only"
   ></math-field>
-  {#if badgeValue !== undefined && badgeValue !== null}
+  {#if badgeValue !== undefined && badgeValue !== null && !isNaN(badgeValue)}
     <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
   {/if}
 </div>
@@ -103,15 +173,26 @@
     padding: 0.5rem 0;
     min-height: 2.4rem;
   }
-  .color-picker {
+  .color-picker-wrapper {
     width: 22px;
     height: 22px;
-    border: none;
     border-radius: 50%;
-    padding: 0;
     cursor: pointer;
-    background: none;
     flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    transition: background-color 0.15s;
+  }
+  .color-picker-wrapper.hidden {
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .native-color-picker {
+    position: absolute;
+    opacity: 0;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
   }
   .eq-number {
     width: 18px;
@@ -152,4 +233,3 @@
     white-space: nowrap;
   }
 </style>
-
