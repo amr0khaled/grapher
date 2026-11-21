@@ -11,8 +11,12 @@ pub use crate::parser::{parse_assignment, parse_expr, parse_function_definition}
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn eval(expr: &str, x: f64, y: f64) -> f64 {
-    crate::eval::eval_expr(expr, x, y)
+pub fn eval(expr: &str, x: f64, y: f64) -> Result<f64, JsValue> {
+    let res = crate::eval::eval_expr(expr, x, y);
+    if res.is_nan() {
+        return Err(JsValue::from_str("Invalid expression"));
+    }
+    Ok(res)
 }
 
 #[wasm_bindgen]
@@ -39,8 +43,8 @@ pub fn sample(
 }
 
 #[wasm_bindgen]
-pub fn get_symbol_values(_lines: Vec<String>) -> js_sys::Object {
-    let symbols = SymbolTable::new();
+pub fn get_symbol_values(lines: Vec<String>) -> js_sys::Object {
+    let symbols = crate::sampling::build_symbols(&lines);
     let vals = symbols.symbol_values(0.0, 0.0);
     let obj = js_sys::Object::new();
     for (k, v) in vals {
@@ -51,4 +55,38 @@ pub fn get_symbol_values(_lines: Vec<String>) -> js_sys::Object {
         );
     }
     obj
+}
+
+#[wasm_bindgen]
+pub fn is_drawable(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    if !s.contains('=') {
+        return false;
+    }
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let lhs = parts[0].trim().to_lowercase();
+    if lhs == "x" || lhs == "y" || lhs.contains('(') {
+        return true;
+    }
+    if lhs.len() == 1 {
+        return false;
+    }
+    true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_is_drawable() {
+        assert!(is_drawable("y=x"));
+        assert!(!is_drawable("a=5"));
+        assert!(is_drawable("x^2+y^2=1"));
+    }
 }

@@ -16,7 +16,7 @@ fn strip_axis_prefix(s: &str) -> Option<(bool, &str)> {
     Some((first == 'x', s[eq_idx + 1..].trim()))
 }
 
-fn build_symbols(lines: &[String]) -> SymbolTable {
+pub fn build_symbols(lines: &[String]) -> SymbolTable {
     let mut symbols = SymbolTable::new();
     for line in lines {
         let trimmed = line.trim();

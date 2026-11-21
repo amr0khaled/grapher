@@ -1,5 +1,5 @@
 // Sampling via Rust WASM engine + grid helpers
-import initEngine, { get_symbol_values, sample } from '../wasm/grapher_engine.js';
+import initEngine, { get_symbol_values, sample, is_drawable } from '../wasm/grapher_engine.js';
 import { toPlainInfix } from './latex';
 
 
@@ -40,6 +40,44 @@ function buildPath2D(flat: Float64Array): Path2D | null {
     }
   }
   return hasPoints ? p : null;
+}
+
+// Classify whether an expression should be drawn on the canvas.
+// Definitions (a = 5) return false; y=..., x=..., f(x)=..., implicit lhs=rhs return true.
+export function isDrawable(expression: string): boolean {
+  const plain = toPlainInfix(expression);
+  return is_drawable(plain);
+}
+
+// Evaluate variable assignments with determinable values.
+// Returns numerical result or null if RHS cannot be completely resolved.
+export function getEvaluatedValue(
+  expression: string,
+  symbols: Record<string, number> = {},
+): number | null {
+  const plain = toPlainInfix(expression).trim();
+  const assignment = plain.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
+  if (!assignment) return null;
+
+  const varName = assignment[1];
+  const rhsExpr = assignment[2].trim();
+
+  // Pure numeric literal
+  if (/^[+-]?\d+(\.\d+)?$/.test(rhsExpr)) {
+    return parseFloat(rhsExpr);
+  }
+
+  // Already computed in symbol table
+  if (symbols[varName] !== undefined && !Number.isNaN(symbols[varName])) {
+    return symbols[varName];
+  }
+
+  // Symbol reference
+  if (symbols[rhsExpr] !== undefined && !Number.isNaN(symbols[rhsExpr])) {
+    return symbols[rhsExpr];
+  }
+
+  return null;
 }
 
 // Sample all lines in one batch; returns index-aligned Path2D objects.
