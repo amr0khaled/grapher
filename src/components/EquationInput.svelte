@@ -74,10 +74,7 @@
       mathFieldEl.value = value;
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
-          let val = mathFieldEl.value || "";
-          val = val.replace(/\\sin\s+c\b/g, "\\operatorname{sinc}");
-          val = val.replace(/\bsin\s+c\b/g, "sinc");
-          value = val;
+          value = mathFieldEl.value || "";
           onUpdateExpression?.(index, value);
         }
       });
