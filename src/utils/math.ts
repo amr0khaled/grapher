@@ -1,5 +1,5 @@
 // Sampling via Rust WASM engine + grid helpers
-import initEngine, { sample, is_drawable } from '../wasm/grapher_engine.js';
+import initEngine, { get_symbol_values, sample, is_drawable } from '../wasm/grapher_engine.js';
 import { toPlainInfix } from './latex';
 
 
@@ -12,21 +12,34 @@ try {
   console.error("WASM engine init failed", e);
 }
 
-// Build SVG path from one line's flat [px, py, ...] buffer; NaN pairs break segments.
-function pathFromFlat(flat: Float64Array): string {
-  let d = '';
-  let pen = false;
+// Evaluate symbol values from expressions
+export function evaluateSymbols(expressions: string[]): Record<string, number> {
+  const plain = expressions.map((e) => toPlainInfix(e));
+  return get_symbol_values(plain) as Record<string, number>;
+}
+
+// Build Path2D from one line's flat [px, py, ...] buffer; NaN pairs break segments.
+function buildPath2D(flat: Float64Array): Path2D | null {
+  if (!flat || flat.length < 2) return null;
+  const p = new Path2D();
+  let hasPoints = false;
+  let startedSubpath = false;
   for (let i = 0; i + 1 < flat.length; i += 2) {
     const x = flat[i];
     const y = flat[i + 1];
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      pen = false;
+      startedSubpath = false;
       continue;
     }
-    d += (pen ? 'L' : 'M') + x.toFixed(2) + ' ' + y.toFixed(2);
-    pen = true;
+    hasPoints = true;
+    if (!startedSubpath) {
+      p.moveTo(x, y);
+      startedSubpath = true;
+    } else {
+      p.lineTo(x, y);
+    }
   }
-  return d;
+  return hasPoints ? p : null;
 }
 
 // Classify whether an expression should be drawn on the canvas.
@@ -67,21 +80,21 @@ export function getEvaluatedValue(
   return null;
 }
 
-// Sample all lines in one batch; returns index-aligned SVG path strings.
-export function sampleAllToPaths(
+// Sample all lines in one batch; returns index-aligned Path2D objects.
+export function sampleToPath2D(
   expressions: string[],
   scale: number,
   offsetX: number,
   offsetY: number,
-  width = 800,
-  height = 600,
-): string[] {
+  width: number,
+  height: number,
+): (Path2D | null)[] {
   const plain = expressions.map((e) => toPlainInfix(e));
   const arrays = sample(plain, scale, offsetX, offsetY, width, height) as unknown[];
-  const out: string[] = [];
+  const out: (Path2D | null)[] = [];
   for (let i = 0; i < arrays.length; i++) {
     const flat = arrays[i] as Float64Array;
-    out.push(pathFromFlat(flat));
+    out.push(buildPath2D(flat));
   }
   return out;
 }
@@ -99,6 +112,32 @@ function niceStep(raw: number): number {
   const mult = raw / pow;
   const step = (mult >= 5 ? 5 : mult >= 2 ? 2 : 1) * pow;
   return Math.max(1, Math.round(step));
+}
+
+export interface PinnedAxis {
+  axisX: number;
+  axisY: number;
+  labelAlignX: "left" | "right" | "center";
+  labelAlignY: "top" | "bottom" | "middle";
+}
+
+export function getPinnedAxisPositions(
+  offsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+  padding: number
+): PinnedAxis {
+  const axisX = Math.max(padding, Math.min(width - padding, offsetX));
+  const axisY = Math.max(padding, Math.min(height - padding, offsetY));
+
+  const labelAlignX: "left" | "right" | "center" =
+    offsetX < padding ? "left" : offsetX > width - padding ? "right" : "left";
+
+  const labelAlignY: "top" | "bottom" | "middle" =
+    offsetY < padding ? "top" : offsetY > height - padding ? "bottom" : "middle";
+
+  return { axisX, axisY, labelAlignX, labelAlignY };
 }
 
 export function generateGridLines(

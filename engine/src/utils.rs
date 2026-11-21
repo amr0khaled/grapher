@@ -81,6 +81,10 @@ pub(crate) fn preprocess_latex(s: &str) -> String {
         let name = &cmd[1..];
         r = replace_command_args(&r, cmd, 1, |args| format!("{}({})", name, args[0]));
     }
+    // \log_{b}{x} -> log(x, b)
+    r = replace_command_args(&r, "\\log", 2, |args| {
+        format!("log({}, {})", args[1], args[0])
+    });
     // \log{x} -> log(x)  (matches our base-10 convention)
     r = replace_command_args(&r, "\\log", 1, |args| format!("log({})", args[0]));
     // \floor{x}, \ceil{x} if present

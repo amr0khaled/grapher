@@ -3,44 +3,69 @@
   import Sidebar from "./layouts/Sidebar.svelte";
   import GraphCanvas from "./components/GraphCanvas.svelte";
   import SettingsCard from "./components/SettingsCard.svelte";
-  import initEngine, { get_symbol_values } from "./wasm/grapher_engine.js";
+  import BottomSheet from "./components/BottomSheet.svelte";
+  import EquationList from "./components/EquationList.svelte";
+  import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
+  import { evaluateSymbols } from "./utils/math";
+  import { resolveLayoutMode } from "./utils/device.svelte";
   import type { ExpressionLine } from "./types.ts";
+  import { GestureTracker } from "./utils/gestureController";
 
   let expressions = $state<ExpressionLine[]>([
-    { expression: "", color: generateColor(0) },
-    { expression: "", color: generateColor(1) },
+    { expression: "", color: generateColor(0), visible: true },
+    { expression: "", color: generateColor(1), visible: true },
   ]);
 
-  // Symbol table derived from assignment lines (top-down evaluation).
-  let symbols = $state<Record<string, number>>({});
-
-  $effect(() => {
-    if (!engineReady) return;
-    try {
-      const exprs = expressions.map((e) => e.expression);
-      symbols = (get_symbol_values(exprs) as Record<string, number>) || {};
-    } catch (e) {
-      symbols = {};
-    }
+  // Symbol table derived from assignment lines (top-down evaluation via WASM).
+  let symbols = $derived.by(() => {
+    if (!engineReady) return {};
+    return evaluateSymbols(expressions.map((e) => e.expression));
   });
 
+  let errorStates = $state<boolean[]>([]);
+  function handlePathsChange(paths: (Path2D | null)[]) {
+    errorStates = expressions.map((expr, i) => {
+      const text = expr.expression.trim();
+      if (text === "") return false;
+      const isAssignmentOrFunc = /^\s*[a-zA-Z_]\w*\s*=/.test(text) || /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
+      return !isAssignmentOrFunc && paths[i] === null;
+    });
+  }
+
   // --- View state ---
+  let windowWidth = $state(typeof window !== "undefined" ? window.innerWidth : 800);
+  let windowHeight = $state(typeof window !== "undefined" ? window.innerHeight : 600);
+
+  onMount(() => {
+    const handleResize = () => {
+      windowWidth = window.innerWidth;
+      windowHeight = window.innerHeight;
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  });
+
+  let layoutMode = $derived(
+    resolveLayoutMode(windowWidth, windowHeight, typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches, typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches)
+  );
+
   let scale = $state(100);
   let offsetX = $state(400);
   let offsetY = $state(300);
   let showGrid = $state(true);
   let darkMode = $state(true);
   let showSettings = $state(false);
+  let showSidebar = $state(false);
   let engineReady = $state(false);
+  let zoomStep = $state(1.12);
 
   // --- Tunables (acceleration / limits) ---
   const MIN_SCALE = 0.0005;
   const MAX_SCALE = 1e9;
-  const ZOOM_STEP = 1.05; // wheel zoom factor per notch
   const ZOOM_BUTTON_STEP = 1.25; // +/- button factor
   const PAN_ACCEL = 1; // >1 faster pan, <1 slower; 1 = 1:1 with cursor
-  const ZOOM_ACCEL = 1; // exponent on wheel delta (1 = normal, 2 = snappier)
+  const ZOOM_ACCEL = 0.5; // smoother wheel zoom
 
   function clampScale(s: number) {
     return Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
@@ -50,6 +75,7 @@
     expressions.splice(afterIndex + 1, 0, {
       expression: "",
       color: generateColor(expressions.length),
+      visible: true,
     });
   }
 
@@ -66,12 +92,18 @@
     expressions[index].color = color;
   }
 
+  function toggleVisibility(index: number) {
+    expressions[index].visible = !expressions[index].visible;
+  }
+
   function zoomAtPoint(clientX: number, clientY: number, factor: number) {
     const svg = document.querySelector(".graph-canvas");
     if (!svg) return;
     const rect = svg.getBoundingClientRect();
-    const mx = ((clientX - rect.left) / rect.width) * 800;
-    const my = ((clientY - rect.top) / rect.height) * 600;
+    const width = rect.width;
+    const height = rect.height;
+    const mx = ((clientX - rect.left) / width) * width;
+    const my = ((clientY - rect.top) / height) * height;
     const f = Math.pow(factor, ZOOM_ACCEL);
     const ns = clampScale(scale * f);
     const k = ns / scale;
@@ -82,74 +114,72 @@
 
   function handleWheel(e: WheelEvent) {
     e.preventDefault();
-    zoomAtPoint(e.clientX, e.clientY, e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP);
-  }
-  let initialZoom = {
-    x: 0,
-    y: 0,
-  };
-  function handleTouchZoomStart(e: TouchEvent) {
-    if (e.touches.length == 2) {
-      let x = 0,
-        y = 0;
-      x = Math.abs(
-        (e.targetTouches.item(0)?.clientX ?? 0) -
-          (e.targetTouches.item(1)?.clientX ?? 0),
-      );
-      y = Math.abs(
-        (e.targetTouches.item(0)?.clientY ?? 0) -
-          (e.targetTouches.item(1)?.clientY ?? 0),
-      );
-      initialZoom = {
-        x,
-        y,
-      };
-    }
-  }
-  function handleTouchZoom(e: TouchEvent) {
-    if (e.touches.length == 2) {
-      const t0 = e.targetTouches.item(0)!;
-      const t1 = e.targetTouches.item(1)!;
-      const mx = (t0.clientX + t1.clientX) / 2;
-      const my = (t0.clientY + t1.clientY) / 2;
-      const dx = t0.clientX - t1.clientX;
-      const dy = t0.clientY - t1.clientY;
-      const dist = Math.hypot(dx, dy);
-      const zoomIn = dist > initialZoom.x;
-      zoomAtPoint(mx, my, zoomIn ? ZOOM_STEP : 1 / ZOOM_STEP);
-    }
-  }
-  function handleTouchEnd() {
-    initialZoom = {
-      x: 0,
-      y: 0,
-    };
+    const normalized = Math.max(-100, Math.min(100, e.deltaY));
+    const factor = Math.pow(zoomStep, -normalized / 100);
+    zoomAtPoint(e.clientX, e.clientY, factor);
   }
 
+  let tracker = new GestureTracker();
   let isPanning = $state(false);
-  let panStart = { x: 0, y: 0 };
-  let panStartOffset = { x: 0, y: 0 };
+  let lastPinchDist = 0;
+  let singlePanStart = { x: 0, y: 0 };
+  let singlePanStartOffset = { x: 0, y: 0 };
 
-  function onPointerDown(e: MouseEvent) {
-    isPanning = true;
-    panStart = { x: e.clientX, y: e.clientY };
-    panStartOffset = { x: offsetX, y: offsetY };
+  let bottomSheetSnap = $state<"peek" | "half" | "full">("half");
+
+  function handlePointerDown(e: PointerEvent) {
+    if (layoutMode === 'mobile') {
+      bottomSheetSnap = 'peek';
+    }
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    tracker.addPointer(e.pointerId, e.clientX, e.clientY);
+    if (tracker.getPointerCount() === 1) {
+      isPanning = true;
+      singlePanStart = { x: e.clientX, y: e.clientY };
+      singlePanStartOffset = { x: offsetX, y: offsetY };
+    } else if (tracker.getPointerCount() === 2) {
+      isPanning = false;
+      const pinch = tracker.getPinchInfo();
+      lastPinchDist = pinch.distance;
+    }
   }
-  function onPointerMove(e: MouseEvent) {
-    if (!isPanning) return;
-    const svg = document.querySelector(".graph-canvas");
-    const ratio = svg ? 800 / svg.getBoundingClientRect().width : 1;
-    offsetX = panStartOffset.x + (e.clientX - panStart.x) * ratio * PAN_ACCEL;
-    offsetY = panStartOffset.y + (e.clientY - panStart.y) * ratio * PAN_ACCEL;
+
+  function handlePointerMove(e: PointerEvent) {
+    tracker.updatePointer(e.pointerId, e.clientX, e.clientY);
+    const count = tracker.getPointerCount();
+    if (count === 2) {
+      const pinch = tracker.getPinchInfo();
+      if (lastPinchDist > 0 && pinch.distance > 0) {
+        const factor = pinch.distance / lastPinchDist;
+        zoomAtPoint(pinch.center.x, pinch.center.y, Math.pow(factor, 0.5));
+        lastPinchDist = pinch.distance;
+      }
+    } else if (count === 1 && isPanning) {
+      offsetX = singlePanStartOffset.x + (e.clientX - singlePanStart.x) * PAN_ACCEL;
+      offsetY = singlePanStartOffset.y + (e.clientY - singlePanStart.y) * PAN_ACCEL;
+    }
   }
-  function onPointerUp(e: MouseEvent) {
-    isPanning = false;
+
+  function handlePointerUp(e: PointerEvent) {
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+    tracker.removePointer(e.pointerId);
+    if (tracker.getPointerCount() < 2) {
+      lastPinchDist = 0;
+    }
+    if (tracker.getPointerCount() === 0) {
+      isPanning = false;
+    }
   }
+
 
   function resetView() {
     scale = 50;
-    offsetX = 400;
-    offsetY = 300;
+    const canvas = document.querySelector(".graph-canvas");
+    const rect = canvas?.getBoundingClientRect();
+    offsetX = (rect?.width ?? 800) / 2;
+    offsetY = (rect?.height ?? 600) / 2;
   }
 
   $effect(() => {
@@ -160,32 +190,58 @@
     try {
       await initEngine();
       engineReady = true;
+      resetView();
+      history.pushState({ modal: false }, "", window.location.href);
+      window.addEventListener("popstate", () => {
+        // @ts-ignore
+        if (window.mathVirtualKeyboard?.visible) {
+          // @ts-ignore
+          window.mathVirtualKeyboard.hide();
+          history.pushState({ modal: false }, "", window.location.href);
+        } else if (bottomSheetSnap === "full" || bottomSheetSnap === "half") {
+          bottomSheetSnap = "peek";
+          history.pushState({ modal: false }, "", window.location.href);
+        }
+      });
     } catch (e) {
       console.error("WASM engine failed to load", e);
     }
   });
 </script>
 
-<div class="grapher-layout" class:dark={darkMode}>
-  <Sidebar
-    {expressions}
-    {addLine}
-    {removeLine}
-    {updateExpression}
-    {updateColor}
-    {symbols}
-  ></Sidebar>
+<div class="grapher-layout" class:dark={darkMode} class:mobile={layoutMode === 'mobile'}>
+  {#if layoutMode !== 'mobile'}
+    {#if showSidebar}
+      <div
+        class="sidebar-scrim"
+        role="button"
+        tabindex="0"
+        aria-label="Close sidebar"
+        onclick={() => (showSidebar = false)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
+      ></div>
+    {/if}
+
+    <Sidebar
+      {expressions}
+      {addLine}
+      {removeLine}
+      {updateExpression}
+      {updateColor}
+      {symbols}
+      {showSidebar}
+      {errorStates}
+      onClose={() => (showSidebar = false)}
+    ></Sidebar>
+  {/if}
 
   <main
     class="graph-main"
     onwheel={handleWheel}
-    ontouchstart={handleTouchZoomStart}
-    ontouchmove={handleTouchZoom}
-    ontouchend={handleTouchEnd}
-    onpointerdown={onPointerDown}
-    onpointermove={onPointerMove}
-    onpointerup={onPointerUp}
-    onpointerleave={onPointerUp}
+    onpointerdown={handlePointerDown}
+    onpointermove={handlePointerMove}
+    onpointerup={handlePointerUp}
+    onpointerleave={handlePointerUp}
   >
     {#if engineReady}
       <GraphCanvas
@@ -195,28 +251,59 @@
         {offsetY}
         {showGrid}
         {darkMode}
+        onPathsChange={handlePathsChange}
       />
     {:else}
       <div class="loading">Loading Engine…</div>
     {/if}
     <div class="zoom-controls">
+      {#if layoutMode !== 'mobile'}
+        <button
+          class="sidebar-toggle"
+          onclick={() => (showSidebar = !showSidebar)}
+          title="Toggle Sidebar"
+          aria-label="Toggle Sidebar">☰</button
+        >
+      {/if}
       <button
         class="settings-btn"
         onclick={() => (showSettings = !showSettings)}
         title="Settings"
         aria-label="Toggle settings">⚙️</button
       >
-      <button onclick={() => zoomAtPoint(400, 300, ZOOM_BUTTON_STEP)}>+</button>
-      <button onclick={() => zoomAtPoint(400, 300, 1 / ZOOM_BUTTON_STEP)}
-        >-</button
+      <button onclick={() => {
+        const canvas = document.querySelector(".graph-canvas");
+        const rect = canvas?.getBoundingClientRect();
+        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, ZOOM_BUTTON_STEP);
+      }}>+</button
+      >
+      <button onclick={() => {
+        const canvas = document.querySelector(".graph-canvas");
+        const rect = canvas?.getBoundingClientRect();
+        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, 1 / ZOOM_BUTTON_STEP);
+      }}>-</button
       >
     </div>
     <SettingsCard
       bind:showGrid
       bind:darkMode
+      bind:zoomStep
       bind:visible={showSettings}
       onResetView={resetView}
     />
+    {#if layoutMode === 'mobile'}
+      <BottomSheet bind:activeSnap={bottomSheetSnap}>
+        <EquationList
+          {expressions}
+          {addLine}
+          {removeLine}
+          {updateExpression}
+          {updateColor}
+          {symbols}
+          errors={errorStates}
+        />
+      </BottomSheet>
+    {/if}
   </main>
 </div>
 
@@ -257,6 +344,8 @@
       sans-serif;
     background: var(--bg);
     color: var(--fg);
+    position: relative;
+    overflow: hidden;
   }
 
   .graph-main {
@@ -296,9 +385,16 @@
     font-weight: bold;
     color: var(--fg);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .zoom-controls button:hover {
     background: var(--border);
+  }
+
+  .sidebar-toggle {
+    display: none;
   }
 
   .settings-btn {
@@ -307,5 +403,33 @@
     font-size: 1.2rem;
     cursor: pointer;
     color: var(--fg);
+  }
+
+  .sidebar-scrim {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .grapher-layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar-toggle {
+      display: flex;
+    }
+    .sidebar-scrim {
+      display: block;
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 15;
+    }
+  }
+
+  @media (max-width: 600px) {
+    .zoom-controls button {
+      width: 48px;
+      height: 48px;
+      font-size: 1.5rem;
+    }
   }
 </style>

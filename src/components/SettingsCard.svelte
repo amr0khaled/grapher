@@ -2,11 +2,13 @@
   let {
     showGrid = $bindable(true),
     darkMode = $bindable(false),
+    zoomStep = $bindable(1.12),
     visible = $bindable(false),
     onResetView,
   }: {
     showGrid?: boolean;
     darkMode?: boolean;
+    zoomStep?: number;
     visible?: boolean;
     onResetView?: () => void;
   } = $props();
@@ -37,6 +39,25 @@
       <span>Dark mode</span>
       <input type="checkbox" bind:checked={darkMode} />
     </label>
+
+    <div class="setting-group">
+      <div class="label-row">
+        <span>Zoom Sensitivity</span>
+        <span class="value">{zoomStep.toFixed(2)}x</span>
+      </div>
+      <input
+        type="range"
+        min="1.01"
+        max="1.5"
+        step="0.01"
+        bind:value={zoomStep}
+        onmousedown={(e) => e.stopPropagation()}
+        onmousemove={(e) => e.stopPropagation()}
+        onpointerdown={(e) => e.stopPropagation()}
+        onpointermove={(e) => e.stopPropagation()}
+        class="range-input"
+      />
+    </div>
 
     {#if typeof onResetView === "function"}
       <button class="reset-btn" onclick={() => onResetView()}>Reset view</button
@@ -94,6 +115,24 @@
   .toggle-row input {
     width: 16px;
     height: 16px;
+    cursor: pointer;
+  }
+  .setting-group {
+    padding: 0.6rem 0;
+    border-top: 1px solid var(--row-border);
+  }
+  .label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+  }
+  .label-row .value {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .range-input {
+    width: 100%;
     cursor: pointer;
   }
   .reset-btn {

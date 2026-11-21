@@ -1,7 +1,13 @@
 export function toPlainInfix(latex: string): string {
   let out = latex;
+  // Remove \left / \right sizing wrappers first
+  out = out.replace(/\\left/g, '').replace(/\\right/g, '');
   // Convert LaTeX superscripts ^{exp} back to ^exp
   out = out.replace(/\^\{([^}]+)\}/g, '^$1');
+  // Convert LaTeX subscripts x_{2} -> x_2
+  out = out.replace(/([a-zA-Z])_\{([^}]+)\}/g, '$1_$2');
+  // Handle \log_{b}(A) and \log_{b} A -> log(A, b)
+  out = out.replace(/\\log(?:_\{([^}]+)\}|_(\w+))\s*\(?([^()]+)\)?/g, 'log($3, $1$2)');
   // Convert fractions \frac{a}{b} back to (a)/(b)
   out = out.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
   // Convert cdot to *
@@ -10,6 +16,8 @@ export function toPlainInfix(latex: string): string {
   out = out.replace(/\\(sqrt|sum|int)\{([^}]+)\}/g, '$1($2)');
   // Cleanup infinity
   out = out.replace(/\\infty/g, 'infinity');
+  // Remaining single-word LaTeX commands are function names: \sin -> sin
+  out = out.replace(/\\([a-zA-Z]+)/g, '$1');
 
   // Insert implicit multiplication between adjacent single letters (ba -> b*a)
   // Be careful not to break function names like sin, cos, tan

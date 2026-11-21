@@ -9,6 +9,7 @@
     updateExpression,
     updateColor,
     symbols,
+    errors = [],
   }: {
     expressions: ExpressionLine[];
     addLine: (afterIndex: number) => void;
@@ -16,6 +17,7 @@
     updateExpression: (index: number, value: string) => void;
     updateColor: (index: number, color: string) => void;
     symbols: Record<string, number>;
+    errors?: boolean[];
   } = $props();
 </script>
 
@@ -25,6 +27,7 @@
       value={expr.expression}
       color={expr.color}
       index={i}
+      isError={errors[i] ?? false}
       onAddLine={addLine}
       onRemoveLine={removeLine}
       onUpdateExpression={updateExpression}
