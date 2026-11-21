@@ -13,13 +13,15 @@
   ]);
 
   // Symbol table derived from assignment lines (top-down evaluation).
-  let symbols = $derived.by(() => {
-    if (!engineReady) return {};
+  let symbols = $state<Record<string, number>>({});
+
+  $effect(() => {
+    if (!engineReady) return;
     try {
       const exprs = expressions.map((e) => e.expression);
-      return get_symbol_values(exprs) as Record<string, number>;
+      symbols = (get_symbol_values(exprs) as Record<string, number>) || {};
     } catch (e) {
-      return {};
+      symbols = {};
     }
   });
 
