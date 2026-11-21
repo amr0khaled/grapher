@@ -1,4 +1,7 @@
-use crate::utils::{insert_implicit_mul, preprocess_latex};
+use crate::{
+    console_log, console_trace,
+    utils::{insert_implicit_mul, preprocess_latex},
+};
 
 // --- Tokenizer ---
 
@@ -61,7 +64,9 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                         continue;
                     }
                     let mut j = end;
-                    while j < b.len() && b[j].is_ascii_whitespace() { j += 1; }
+                    while j < b.len() && b[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
                     if (j < b.len() && b[j] == b'(') || crate::builtins::is_one_arg(name) {
                         matched = Some(*name);
                         break;
@@ -70,7 +75,9 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
             }
             if let Some(name) = matched {
                 let mut j = i + name.len();
-                while j < b.len() && b[j].is_ascii_whitespace() { j += 1; }
+                while j < b.len() && b[j].is_ascii_whitespace() {
+                    j += 1;
+                }
                 out.push(Tok::Fn(name.to_string()));
                 i = j;
                 continue;
@@ -80,7 +87,8 @@ pub(crate) fn tokenize(s: &str) -> Result<Vec<Tok>, String> {
                 i += 1;
             }
             // optional _subscript: word or word_digits (e.g. x_2, a_t) -> one symbol
-            if i < b.len() && b[i] == b'_'
+            if i < b.len()
+                && b[i] == b'_'
                 && i + 1 < b.len()
                 && (b[i + 1].is_ascii_alphanumeric() || b[i + 1] == b'_')
             {
@@ -270,6 +278,7 @@ pub enum Node {
 pub fn parse_expr(s: &str) -> Result<Node, String> {
     let cleaned = preprocess_latex(s);
     let toks = insert_implicit_mul(tokenize(&cleaned)?);
+    console_log!("toks: {:?} {:?} {:?}", s, cleaned, toks);
     let mut p = Parser { toks, pos: 0 };
     let tree = p.parse_expr()?;
     if p.pos != p.toks.len() {
@@ -291,19 +300,13 @@ pub fn parse_function_definition(s: &str) -> Result<(String, String, Node), Stri
     if name.is_empty() {
         return Err("function name must not be empty".to_string());
     }
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err("function name must be alphanumeric".to_string());
     }
     if arg.is_empty() {
         return Err("function arg must not be empty".to_string());
     }
-    if !arg
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
+    if !arg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err("function arg must be alphanumeric".to_string());
     }
     let body = parse_expr(parts[1])?;
@@ -319,10 +322,7 @@ pub fn parse_assignment(s: &str) -> Result<(String, Node), String> {
     if name.is_empty() {
         return Err("invalid symbol name".to_string());
     }
-    if !name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return Err("symbol name must be alphanumeric (or _)".to_string());
     }
     let node = parse_expr(parts[1])?;

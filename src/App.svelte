@@ -25,17 +25,26 @@
 
   let errorStates = $state<boolean[]>([]);
   function handlePathsChange(paths: (Path2D | null)[]) {
+    if (errorStates.length !== expressions.length) {
+      errorStates.length = expressions.length;
+    }
     errorStates = expressions.map((expr, i) => {
       const text = expr.expression.trim();
       if (text === "") return false;
-      const isAssignmentOrFunc = /^\s*[a-zA-Z_]\w*\s*=/.test(text) || /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
+      const isAssignmentOrFunc =
+        /^\s*[a-zA-Z_]\w*\s*=/.test(text) ||
+        /^\s*[a-zA-Z_]\w*\s*\(.*\)\s*=/.test(text);
       return !isAssignmentOrFunc && paths[i] === null;
     });
   }
 
   // --- View state ---
-  let windowWidth = $state(typeof window !== "undefined" ? window.innerWidth : 800);
-  let windowHeight = $state(typeof window !== "undefined" ? window.innerHeight : 600);
+  let windowWidth = $state(
+    typeof window !== "undefined" ? window.innerWidth : 800,
+  );
+  let windowHeight = $state(
+    typeof window !== "undefined" ? window.innerHeight : 600,
+  );
 
   onMount(() => {
     const handleResize = () => {
@@ -47,7 +56,14 @@
   });
 
   let layoutMode = $derived(
-    resolveLayoutMode(windowWidth, windowHeight, typeof window !== "undefined" && window.matchMedia("(hover: hover)").matches, typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches)
+    resolveLayoutMode(
+      windowWidth,
+      windowHeight,
+      typeof window !== "undefined" &&
+        window.matchMedia("(hover: hover)").matches,
+      typeof window !== "undefined" &&
+        window.matchMedia("(pointer: fine)").matches,
+    ),
   );
 
   let scale = $state(100);
@@ -125,11 +141,11 @@
   let singlePanStart = { x: 0, y: 0 };
   let singlePanStartOffset = { x: 0, y: 0 };
 
-  let bottomSheetSnap = $state<"peek" | "half" | "full">("half");
+  let bottomSheetSnap = $state<"peek" | "half" | "full">("peek");
 
   function handlePointerDown(e: PointerEvent) {
-    if (layoutMode === 'mobile') {
-      bottomSheetSnap = 'peek';
+    if (layoutMode === "mobile") {
+      bottomSheetSnap = "peek";
     }
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     tracker.addPointer(e.pointerId, e.clientX, e.clientY);
@@ -155,8 +171,11 @@
         lastPinchDist = pinch.distance;
       }
     } else if (count === 1 && isPanning) {
-      offsetX = singlePanStartOffset.x + (e.clientX - singlePanStart.x) * PAN_ACCEL;
-      offsetY = singlePanStartOffset.y + (e.clientY - singlePanStart.y) * PAN_ACCEL;
+      const panFactor = layoutMode === "mobile" ? 0.85 : PAN_ACCEL;
+      offsetX =
+        singlePanStartOffset.x + (e.clientX - singlePanStart.x) * panFactor;
+      offsetY =
+        singlePanStartOffset.y + (e.clientY - singlePanStart.y) * panFactor;
     }
   }
 
@@ -172,7 +191,6 @@
       isPanning = false;
     }
   }
-
 
   function resetView() {
     scale = 50;
@@ -209,8 +227,12 @@
   });
 </script>
 
-<div class="grapher-layout" class:dark={darkMode} class:mobile={layoutMode === 'mobile'}>
-  {#if layoutMode !== 'mobile'}
+<div
+  class="grapher-layout"
+  class:dark={darkMode}
+  class:mobile={layoutMode === "mobile"}
+>
+  {#if layoutMode !== "mobile"}
     {#if showSidebar}
       <div
         class="sidebar-scrim"
@@ -218,7 +240,9 @@
         tabindex="0"
         aria-label="Close sidebar"
         onclick={() => (showSidebar = false)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') showSidebar = false; }}
+        onkeydown={(e) => {
+          if (e.key === "Enter" || e.key === " ") showSidebar = false;
+        }}
       ></div>
     {/if}
 
@@ -257,7 +281,7 @@
       <div class="loading">Loading Engine…</div>
     {/if}
     <div class="zoom-controls">
-      {#if layoutMode !== 'mobile'}
+      {#if layoutMode !== "mobile"}
         <button
           class="sidebar-toggle"
           onclick={() => (showSidebar = !showSidebar)}
@@ -271,17 +295,27 @@
         title="Settings"
         aria-label="Toggle settings">⚙️</button
       >
-      <button onclick={() => {
-        const canvas = document.querySelector(".graph-canvas");
-        const rect = canvas?.getBoundingClientRect();
-        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, ZOOM_BUTTON_STEP);
-      }}>+</button
+      <button
+        onclick={() => {
+          const canvas = document.querySelector(".graph-canvas");
+          const rect = canvas?.getBoundingClientRect();
+          zoomAtPoint(
+            (rect?.left ?? 0) + (rect?.width ?? 800) / 2,
+            (rect?.top ?? 0) + (rect?.height ?? 600) / 2,
+            ZOOM_BUTTON_STEP,
+          );
+        }}>+</button
       >
-      <button onclick={() => {
-        const canvas = document.querySelector(".graph-canvas");
-        const rect = canvas?.getBoundingClientRect();
-        zoomAtPoint((rect?.left ?? 0) + (rect?.width ?? 800) / 2, (rect?.top ?? 0) + (rect?.height ?? 600) / 2, 1 / ZOOM_BUTTON_STEP);
-      }}>-</button
+      <button
+        onclick={() => {
+          const canvas = document.querySelector(".graph-canvas");
+          const rect = canvas?.getBoundingClientRect();
+          zoomAtPoint(
+            (rect?.left ?? 0) + (rect?.width ?? 800) / 2,
+            (rect?.top ?? 0) + (rect?.height ?? 600) / 2,
+            1 / ZOOM_BUTTON_STEP,
+          );
+        }}>-</button
       >
     </div>
     <SettingsCard
@@ -291,20 +325,20 @@
       bind:visible={showSettings}
       onResetView={resetView}
     />
-    {#if layoutMode === 'mobile'}
-      <BottomSheet bind:activeSnap={bottomSheetSnap}>
-        <EquationList
-          {expressions}
-          {addLine}
-          {removeLine}
-          {updateExpression}
-          {updateColor}
-          {symbols}
-          errors={errorStates}
-        />
-      </BottomSheet>
-    {/if}
   </main>
+  {#if layoutMode === "mobile"}
+    <BottomSheet bind:activeSnap={bottomSheetSnap}>
+      <EquationList
+        {expressions}
+        {addLine}
+        {removeLine}
+        {updateExpression}
+        {updateColor}
+        {symbols}
+        errors={errorStates}
+      />
+    </BottomSheet>
+  {/if}
 </div>
 
 <style>
@@ -372,7 +406,7 @@
     gap: 2px;
     z-index: 10;
     background: var(--panel);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     border-radius: 4px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   }

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "bun build:rs && vite build",
-    "build:rs": "bash -c \"cd engine && wasm-pack build --target web --out-dir ../src/wasm\"",
+    "build": "bun build:rs:release && vite build",
+    "build:rs:release": "bash -c \"cd engine && wasm-pack build --release --target web --out-dir ../src/wasm\"",
+    "build:rs": "bash -c \"cd engine && wasm-pack build --debug --target web --out-dir ../src/wasm\"",
     "preview": "vite preview",
     "check": "svelte-check"
   },

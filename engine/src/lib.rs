@@ -1,9 +1,9 @@
+pub mod builtins;
 pub mod eval;
 pub mod parser;
 pub mod sampling;
-pub mod utils;
-pub mod builtins;
 pub mod transforms;
+pub mod utils;
 
 pub use crate::eval::SymbolTable;
 pub use crate::parser::{parse_assignment, parse_expr, parse_function_definition};
@@ -11,10 +11,10 @@ pub use crate::parser::{parse_assignment, parse_expr, parse_function_definition}
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn eval(expr: &str, x: f64, y: f64) -> Result<f64, JsValue> {
+pub fn eval(expr: &str, x: f64, y: f64) -> Result<f64, JsError> {
     let res = crate::eval::eval_expr(expr, x, y);
     if res.is_nan() {
-        return Err(JsValue::from_str("Invalid expression"));
+        return Err(JsError::new("Invalid expression"));
     }
     Ok(res)
 }

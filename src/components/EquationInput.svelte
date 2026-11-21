@@ -1,6 +1,6 @@
 <script lang="ts">
   import Warning from "./Warning.svelte";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import "mathlive";
   import { isDrawable, getEvaluatedValue } from "../utils/math";
   import { _eval } from "../wasm/grapher_engine.js";
@@ -10,7 +10,7 @@
     color = $bindable("#388c46"),
     visible = $bindable(true),
     index = 0,
-    isError = false,
+    isError = $bindable(false),
     onAddLine,
     onRemoveLine,
     onUpdateExpression,
@@ -39,7 +39,7 @@
         inlineShortcuts?: Record<string, string>;
       })
     | null = null;
-  let colorInputEl: HTMLInputElement | null = null;
+  let colorInputEl: HTMLInputElement | null = $state(null);
   let longPressTimer: any = null;
 
   let drawable = $derived(isDrawable(value));
@@ -80,6 +80,7 @@
     if (mathFieldEl) {
       if ("macros" in mathFieldEl) {
         mathFieldEl.macros = {
+          // @ts-ignore
           ...mathFieldEl.macros,
           sinc: "\\operatorname{sinc}",
         };
@@ -94,17 +95,22 @@
       mathFieldEl.addEventListener("focus", () => {
         // @ts-ignore
         if (showMathKeyboard) {
+          // @ts-ignore
           navigator?.virtualKeyboard?.hide?.();
           window.mathVirtualKeyboard?.show?.();
         } else {
+          // @ts-ignore
           navigator?.virtualKeyboard?.show?.();
           window.mathVirtualKeyboard?.hide?.();
         }
       });
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
-          value = mathFieldEl.value || "";
-          onUpdateExpression?.(index, value);
+          const nextValue = mathFieldEl.value || "";
+          if (nextValue !== value) {
+            value = nextValue;
+            onUpdateExpression?.(index, nextValue);
+          }
         }
       });
       mathFieldEl.addEventListener("keydown", (e: KeyboardEvent) => {
@@ -127,12 +133,20 @@
     };
   });
 
+  let isSyncingFromProp = false;
   $effect(() => {
     if (mathFieldEl && mathFieldEl.value !== value) {
+      isSyncingFromProp = true;
       mathFieldEl.value = value;
+      setTimeout(() => {
+        isSyncingFromProp = false;
+      }, 0);
     }
   });
   let evaluation = $derived.by(() => {
+    if (!value.trim()) {
+      return { value: null, error: null };
+    }
     const simpleVal = getEvaluatedValue(value, symbols);
     if (simpleVal !== null) {
       return { value: simpleVal, error: null };
@@ -149,6 +163,12 @@
   });
   let badgeValue = $derived(evaluation.value);
   let errorMessage = $derived<string | null>(evaluation.error);
+  $effect(() => {
+    const thereAreError = errorMessage !== null && badgeValue !== null;
+    if (untrack(() => isError) !== thereAreError) {
+      isError = thereAreError;
+    }
+  });
 </script>
 
 <div class="equation-row">
@@ -158,8 +178,6 @@
       <Warning class="eq-error-badge" size={20} />
       <div class="error-popover">Invalid expression or formula syntax</div>
     </div>
-  {:else if badgeValue !== undefined && badgeValue !== null}
-    <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
   {:else}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
@@ -197,8 +215,9 @@
     math-virtual-keyboard-policy="manual"
     virtualkeyboardpolicy="manual"
   ></math-field>
-  {#if badgeValue !== undefined && badgeValue !== null && !isNaN(badgeValue)}
-    <span class="eq-badge">{+badgeValue.toFixed(6)}</span>
+  {console.log(badgeValue, errorMessage)}
+  {#if badgeValue !== undefined && badgeValue !== null}
+    <span class="eq-badge">{+badgeValue.toPrecision(6)}</span>
   {/if}
 </div>
 
@@ -215,10 +234,11 @@
     gap: 0.5rem;
     padding: 0.2rem 0;
     min-height: 20px;
+    position: relative;
   }
   .color-picker-wrapper {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     cursor: pointer;
     flex-shrink: 0;
@@ -236,17 +256,6 @@
     width: 100%;
     height: 100%;
     cursor: pointer;
-  }
-  .color-picker::-webkit-color-swatch-wrapper {
-    padding: 0;
-  }
-  .color-picker::-webkit-color-swatch {
-    border: none;
-    border-radius: 50%;
-  }
-  .color-picker::-moz-color-swatch {
-    border: none;
-    border-radius: 50%;
   }
   .eq-number {
     min-width: 24px;
@@ -275,6 +284,7 @@
     border-bottom-color: var(--accent);
   }
   .error-wrapper {
+    padding: 1.5px;
     position: relative;
     display: flex;
     align-items: center;
@@ -301,13 +311,17 @@
     visibility: visible;
   }
   .eq-badge {
+    position: absolute;
+    bottom: 10px;
+    right: 20px;
+    place-self: center;
     align-self: flex-end;
     font-size: 0.75rem;
     color: var(--muted);
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 4px;
-    padding: 0 0.35rem;
+    padding: 0 0.37rem;
     line-height: 1.5;
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;

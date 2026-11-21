@@ -5,7 +5,7 @@
   type SnapPoint = "peek" | "half" | "full";
 
   let {
-    activeSnap = $bindable<SnapPoint>("half"),
+    activeSnap = $bindable<SnapPoint>("peek"),
     onCanvasTap,
     children,
   }: {
@@ -25,7 +25,7 @@
   function getSnapTranslateY(snap: SnapPoint): number {
     switch (snap) {
       case "peek":
-        return SHEET_HEIGHT - 72;
+        return SHEET_HEIGHT - 40;
       case "half":
         return SHEET_HEIGHT * 0.45;
       case "full":
@@ -57,7 +57,7 @@
   let totalDragDistance = 0;
 
   function onPointerDown(e: PointerEvent) {
-    if (!(e.target as HTMLElement).closest('.drag-handle')) return;
+    if (!(e.target as HTMLElement).closest(".drag-handle")) return;
     e.stopPropagation();
     dragging = true;
     dragStartY = e.clientY;
@@ -124,8 +124,8 @@
 
   function onFocusIn(e: FocusEvent) {
     const target = e.target as HTMLElement;
-    if (target && target.closest('.equation-row')) {
-      target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (target && target.closest(".equation-row")) {
+      target.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
   }
 
@@ -135,7 +135,10 @@
     function onResize() {
       const vv = window.visualViewport;
       if (!vv) return;
-      keyboardOffset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      keyboardOffset = Math.max(
+        0,
+        window.innerHeight - vv.height - vv.offsetTop,
+      );
     }
     vv.addEventListener("resize", onResize);
     vv.addEventListener("scroll", onResize);
@@ -146,7 +149,7 @@
   });
 
   let computedTranslateY = $derived(
-    dragging ? currentTranslateY : getSnapTranslateY(activeSnap)
+    dragging ? currentTranslateY : getSnapTranslateY(activeSnap),
   );
 </script>
 

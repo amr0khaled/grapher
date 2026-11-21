@@ -137,3 +137,19 @@ pub(crate) fn insert_implicit_mul(tokens: Vec<crate::parser::Tok>) -> Vec<crate:
     }
     out
 }
+
+#[macro_export]
+macro_rules! console_log {
+    ($($t:tt)*) => {
+        #[cfg(debug_assertions)]
+        web_sys::console::log_1(&format!($($t)*).into());
+    }
+}
+
+#[macro_export]
+macro_rules! console_trace {
+    ($($t:tt)*) => {
+        #[cfg(debug_assertions)]
+        web_sys::console::trace_1(&format!($($t)*).into());
+    }
+}

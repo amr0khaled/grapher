@@ -28,7 +28,11 @@
 <aside class="sidebar" class:open={showSidebar}>
   <header class="sidebar-header">
     <h2>Grapher</h2>
-    <button class="close-drawer-btn" onclick={onClose} aria-label="Close sidebar">✕</button>
+    <button
+      class="close-drawer-btn"
+      onclick={onClose}
+      aria-label="Close sidebar">✕</button
+    >
   </header>
   <EquationList
     {expressions}
@@ -46,7 +50,7 @@
     border-right: 1px solid var(--border);
     background: var(--panel);
     color: var(--fg);
-    padding: 1rem;
+    padding: 0.5rem;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -62,7 +66,7 @@
   .sidebar-header h2 {
     margin: 0;
     font-size: 1.2rem;
-    font-family: 'Cambria Math', 'MathJax_Math', 'Times New Roman', serif;
+    font-family: "Cambria Math", "MathJax_Math", "Times New Roman", serif;
     font-weight: bold;
   }
   .close-drawer-btn {

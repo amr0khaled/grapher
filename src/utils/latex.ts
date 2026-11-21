@@ -1,4 +1,5 @@
 export function toPlainInfix(latex: string): string {
+  if (!latex.trim()) return ""
   let out = latex;
   // Remove \left / \right sizing wrappers first
   out = out.replace(/\\left/g, '').replace(/\\right/g, '');
@@ -9,7 +10,7 @@ export function toPlainInfix(latex: string): string {
   // Handle \log_{b}(A) and \log_{b} A -> log(A, b)
   out = out.replace(/\\log(?:_\{([^}]+)\}|_(\w+))\s*\(?([^()]+)\)?/g, 'log($3, $1$2)');
   // Convert fractions \frac{a}{b} back to (a)/(b)
-  out = out.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
+  out = out.replace(/\\frac\s*(?:\{([^}]*)\}|([0-9a-zA-Z]))\s*(?:\{([^}]*)\}|([0-9a-zA-Z]))/g, (_, bNum, sNum, bDen, sDen) => `(${bNum ?? sNum})/(${bDen ?? sDen})`);
   // Convert cdot to *
   out = out.replace(/\\cdot/g, '*');
   // Remove curly braces from functions
