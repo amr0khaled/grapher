@@ -9,8 +9,12 @@ pub use crate::parser::{parse_assignment, parse_expr, parse_function_definition}
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn eval(expr: &str, x: f64, y: f64) -> f64 {
-    crate::eval::eval_expr(expr, x, y)
+pub fn eval(expr: &str, x: f64, y: f64) -> Result<f64, JsValue> {
+    let res = crate::eval::eval_expr(expr, x, y);
+    if res.is_nan() {
+        return Err(JsValue::from_str("Invalid expression"));
+    }
+    Ok(res)
 }
 
 #[wasm_bindgen]
