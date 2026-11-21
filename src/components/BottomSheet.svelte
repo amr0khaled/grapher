@@ -108,11 +108,18 @@
     }
 
     currentTranslateY = 0;
+    if (activeSnap !== target) {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate(10);
+      }
+    }
     activeSnap = target;
   }
 
   function handleHandleClick(e: MouseEvent) {
     if (totalDragDistance > 6) return;
+    if (typeof navigator !== "undefined" && navigator.vibrate)
+      navigator.vibrate(10);
     if (activeSnap === "peek") {
       activeSnap = "half";
     } else if (activeSnap === "half") {
@@ -193,6 +200,11 @@
     overflow: hidden;
     will-change: transform;
     transition: transform 300ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bottom-sheet {
+      transition: none !important;
+    }
   }
   .bottom-sheet.dragging {
     transition: none;

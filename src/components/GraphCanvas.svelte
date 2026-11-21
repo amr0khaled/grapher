@@ -188,7 +188,7 @@
     ctx.scale(dpr, dpr);
 
     const paths = sampleToPath2D(
-      expressions.map((e) => e.expression),
+      expressions?.map((e) => e.expression),
       scale,
       offsetX,
       offsetY,

@@ -5,17 +5,37 @@
   import SettingsCard from "./components/SettingsCard.svelte";
   import BottomSheet from "./components/BottomSheet.svelte";
   import EquationList from "./components/EquationList.svelte";
+  import ShortcutModal from "./components/ShortcutModal.svelte";
   import initEngine from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
   import { evaluateSymbols } from "./utils/math";
   import { resolveLayoutMode } from "./utils/device.svelte";
-  import type { ExpressionLine } from "./types.ts";
+  import type { ExpressionLine, LatexImage } from "./types.ts";
   import { GestureTracker } from "./utils/gestureController";
+  import { saveState, decodeShareUrl, encodeShareUrl } from "./utils/storage";
+  import { latexToImage } from "./utils/png";
 
-  let expressions = $state<ExpressionLine[]>([
-    { expression: "", color: generateColor(0), visible: true },
-    { expression: "", color: generateColor(1), visible: true },
-  ]);
+  let expressions = $state<ExpressionLine[]>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.expressions) return shared.expressions;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.expressions) return parsed.expressions;
+          } catch {}
+        }
+      }
+      return [
+        { expression: "", color: generateColor(0), visible: true },
+        { expression: "", color: generateColor(1), visible: true },
+      ];
+    })(),
+  );
 
   // Symbol table derived from assignment lines (top-down evaluation via WASM).
   let symbols = $derived.by(() => {
@@ -66,12 +86,90 @@
     ),
   );
 
-  let scale = $state(100);
-  let offsetX = $state(400);
-  let offsetY = $state(300);
-  let showGrid = $state(true);
-  let darkMode = $state(true);
+  let scale = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.scale) return shared.scale;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.scale) return parsed.scale;
+          } catch {}
+        }
+      }
+      return 100;
+    })(),
+  );
+  let offsetX = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.offsetX) return shared.offsetX;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.offsetX) return parsed.offsetX;
+          } catch {}
+        }
+      }
+      return 400;
+    })(),
+  );
+  let offsetY = $state<number>(
+    (() => {
+      if (typeof window !== "undefined" && window.location.hash) {
+        const shared = decodeShareUrl(window.location.hash);
+        if (shared && shared.offsetY) return shared.offsetY;
+      }
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.offsetY) return parsed.offsetY;
+          } catch {}
+        }
+      }
+      return 300;
+    })(),
+  );
+  let showGrid = $state<boolean>(
+    (() => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.showGrid !== undefined) return parsed.showGrid;
+          } catch {}
+        }
+      }
+      return true;
+    })(),
+  );
+  let darkMode = $state<boolean>(
+    (() => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("grapher_state_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (parsed.darkMode !== undefined) return parsed.darkMode;
+          } catch {}
+        }
+      }
+      return true;
+    })(),
+  );
   let showSettings = $state(false);
+  let showShortcutModal = $state(false);
   let showSidebar = $state(false);
   let engineReady = $state(false);
   let zoomStep = $state(1.12);
@@ -204,7 +302,164 @@
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
   });
 
+  $effect(() => {
+    // Autosave state on change
+    saveState({
+      expressions,
+      scale,
+      offsetX,
+      offsetY,
+      showGrid,
+      darkMode,
+    });
+  });
+
+  async function shareUrl() {
+    const hash = encodeShareUrl({
+      expressions,
+      scale,
+      offsetX,
+      offsetY,
+      showGrid,
+      darkMode,
+    });
+    const url = `${window.location.origin}${window.location.pathname}#${hash}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Grapher Plot", url });
+        return;
+      } catch {}
+    }
+    await navigator.clipboard.writeText(url);
+    alert("Share URL copied to clipboard!");
+  }
+
+  async function exportPng() {
+    const canvas = document.querySelector(
+      ".graph-canvas",
+    ) as HTMLCanvasElement | null;
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const exportCanvas = document.createElement("canvas");
+    exportCanvas.width = canvas.width;
+    exportCanvas.height = canvas.height;
+    const ctx = exportCanvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = darkMode ? "#0f172a" : "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height);
+
+    const validExprs = expressions.filter((e) => e.expression.trim() !== "");
+    if (validExprs.length > 0) {
+      const textColor = darkMode ? "#e2e8f0" : "#1e293b";
+      const padding = 12;
+      const maxContentW = 320;
+
+      // Render LaTeX -> images (null = fall back to plain text)
+      const rendered: (LatexImage | null)[] = await Promise.all(
+        validExprs.map((e) =>
+          latexToImage(e.expression, textColor, 16, maxContentW).catch((e) => {
+            console.error("latexToImage failed:", e);
+            return null;
+          }),
+        ),
+      );
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.font = "13px sans-serif";
+
+      const rowH = Math.max(24, ...rendered.map((r) => (r ? r.height + 8 : 0)));
+      const contentW = Math.max(
+        ...rendered.map((r, i) =>
+          r
+            ? r.width
+            : Math.min(
+                ctx.measureText(validExprs[i].expression).width,
+                maxContentW,
+              ),
+        ),
+      );
+      const boxWidth = contentW + 44;
+      const boxHeight = padding * 2 + validExprs.length * rowH;
+      const boxX = canvas.width / dpr - boxWidth - 20;
+      const boxY = 20;
+
+      ctx.fillStyle = darkMode
+        ? "rgba(30, 41, 59, 0.9)"
+        : "rgba(255, 255, 255, 0.9)";
+      ctx.strokeStyle = darkMode ? "#334155" : "#e2e8f0";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.textBaseline = "middle";
+      validExprs.forEach((expr, i) => {
+        const itemY = boxY + padding + i * rowH + rowH / 2;
+
+        ctx.fillStyle = expr.color;
+        ctx.fillRect(boxX + 12, itemY - 6, 12, 12);
+
+        const r = rendered[i];
+        if (r) {
+          ctx.drawImage(
+            r.img,
+            boxX + 32,
+            itemY - r.height / 2,
+            r.width,
+            r.height,
+          );
+        } else {
+          ctx.fillStyle = textColor;
+          ctx.fillText(expr.expression, boxX + 32, itemY, maxContentW);
+        }
+      });
+      ctx.restore();
+    }
+
+    exportCanvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], "graph.png", { type: "image/png" });
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({ files: [file] })
+      ) {
+        try {
+          await navigator.share({ files: [file], title: "Grapher Plot" });
+          return;
+        } catch {}
+      }
+      const a = document.createElement("a");
+      a.download = "graph.png";
+      a.href = URL.createObjectURL(blob);
+      a.click();
+    }, "image/png");
+  }
+
+  function triggerHaptic() {
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+  }
+
   onMount(async () => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (
+        (e.target as HTMLElement).tagName === "MATH-FIELD" ||
+        (e.target as HTMLElement).tagName === "INPUT"
+      )
+        return;
+      if (e.key === "?") {
+        showShortcutModal = !showShortcutModal;
+        triggerHaptic();
+      }
+    };
+    window.addEventListener("keydown", handleKeydown);
     try {
       await initEngine();
       engineReady = true;
@@ -324,8 +579,11 @@
       bind:zoomStep
       bind:visible={showSettings}
       onResetView={resetView}
+      onShareUrl={shareUrl}
+      onExportPng={exportPng}
     />
   </main>
+  <ShortcutModal bind:visible={showShortcutModal} />
   {#if layoutMode === "mobile"}
     <BottomSheet bind:activeSnap={bottomSheetSnap}>
       <EquationList

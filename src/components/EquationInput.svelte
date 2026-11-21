@@ -96,11 +96,11 @@
         // @ts-ignore
         if (showMathKeyboard) {
           // @ts-ignore
-          navigator?.virtualKeyboard?.hide?.();
+          (navigator as any)?.virtualKeyboard?.hide?.();
           window.mathVirtualKeyboard?.show?.();
         } else {
           // @ts-ignore
-          navigator?.virtualKeyboard?.show?.();
+          (navigator as any)?.virtualKeyboard?.show?.();
           window.mathVirtualKeyboard?.hide?.();
         }
       });
