@@ -41,8 +41,8 @@ pub fn sample(
 }
 
 #[wasm_bindgen]
-pub fn get_symbol_values(_lines: Vec<String>) -> js_sys::Object {
-    let symbols = SymbolTable::new();
+pub fn get_symbol_values(lines: Vec<String>) -> js_sys::Object {
+    let symbols = crate::sampling::build_symbols(&lines);
     let vals = symbols.symbol_values(0.0, 0.0);
     let obj = js_sys::Object::new();
     for (k, v) in vals {

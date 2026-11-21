@@ -3,7 +3,7 @@
   import Sidebar from "./layouts/Sidebar.svelte";
   import GraphCanvas from "./components/GraphCanvas.svelte";
   import SettingsCard from "./components/SettingsCard.svelte";
-  import initEngine from "./wasm/grapher_engine.js";
+  import initEngine, { get_symbol_values } from "./wasm/grapher_engine.js";
   import { generateColor } from "./utils/colors";
   import type { ExpressionLine } from "./types.ts";
 
@@ -13,7 +13,15 @@
   ]);
 
   // Symbol table derived from assignment lines (top-down evaluation).
-  let symbols: Record<string, number> = {};
+  let symbols = $derived.by(() => {
+    if (!engineReady) return {};
+    try {
+      const exprs = expressions.map((e) => e.expression);
+      return get_symbol_values(exprs) as Record<string, number>;
+    } catch (e) {
+      return {};
+    }
+  });
 
   // --- View state ---
   let scale = $state(100);
