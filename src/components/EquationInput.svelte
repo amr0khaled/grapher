@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import "mathlive";
-  import { isDrawable } from "../utils/math";
+  import { isDrawable, getEvaluatedValue } from "../utils/math";
+  import { _eval } from "../wasm/grapher_engine.js";
 
   let {
     value = $bindable(""),
@@ -58,10 +59,25 @@
 
   onMount(() => {
     if (mathFieldEl) {
+      if ("macros" in mathFieldEl) {
+        mathFieldEl.macros = {
+          ...mathFieldEl.macros,
+          sinc: "\\operatorname{sinc}",
+        };
+      }
+      if ("inlineShortcuts" in mathFieldEl) {
+        mathFieldEl.inlineShortcuts = {
+          ...mathFieldEl["inlineShortcuts"],
+          sinc: "\\operatorname{sinc}",
+        };
+      }
       mathFieldEl.value = value;
       mathFieldEl.addEventListener("input", () => {
         if (mathFieldEl && "value" in mathFieldEl) {
-          value = mathFieldEl.value || "";
+          let val = mathFieldEl.value || "";
+          val = val.replace(/\\sin\s+c\b/g, "\\operatorname{sinc}");
+          val = val.replace(/\bsin\s+c\b/g, "sinc");
+          value = val;
           onUpdateExpression?.(index, value);
         }
       });
@@ -86,20 +102,23 @@
       mathFieldEl.value = value;
     }
   });
-
-  let badgeValue = $derived.by(() => {
-    const assignment = value.match(/^\s*([a-zA-Z_]\w*)\s*=\s*(.+)$/);
-    if (assignment) {
-      const varName = assignment[1];
-      const rhsExpr = assignment[2].trim();
-      // If RHS is a pure number or resolvable symbol
-      if (/^[+-]?\d+(\.\d+)?$/.test(rhsExpr)) {
-        return parseFloat(rhsExpr);
-      }
-      return symbols[varName] !== undefined ? symbols[varName] : symbols[rhsExpr];
+  let evaluation = $derived.by(() => {
+    const simpleVal = getEvaluatedValue(value, symbols);
+    if (simpleVal !== null) {
+      return { value: simpleVal, error: null };
     }
-    return null;
+
+    try {
+      return { value: _eval(value, 0, 0), error: null };
+    } catch (e) {
+      return {
+        value: null,
+        error: e instanceof Error ? e.message : "Evaluation error",
+      };
+    }
   });
+  let badgeValue = $derived(evaluation.value);
+  let errorMessage = $derived<string | null>(evaluation.error);
 </script>
 
 <div class="equation-row">
@@ -107,14 +126,18 @@
   <div
     class="color-picker-wrapper"
     class:hidden={!drawable}
-    style="background-color: {visible ? color : 'transparent'}; border: 2px solid {color};"
+    style="background-color: {visible
+      ? color
+      : 'transparent'}; border: 2px solid {color};"
     onclick={handleColorClick}
     ondblclick={handleColorDblClick}
     ontouchstart={handleTouchStart}
     ontouchend={handleTouchEnd}
     role="button"
     tabindex="0"
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleColorClick(); }}
+    onkeydown={(e) => {
+      if (e.key === "Enter" || e.key === " ") handleColorClick();
+    }}
     aria-label="Toggle visibility or change color"
   >
     <input
@@ -213,4 +236,3 @@
     white-space: nowrap;
   }
 </style>
-
