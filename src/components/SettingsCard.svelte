@@ -64,24 +64,36 @@
     </div>
 
     {#if typeof onResetView === "function"}
-      <button class="reset-btn" onclick={() => {
-        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-        onResetView();
-      }}>Reset view</button>
+      <button
+        class="reset-btn"
+        onclick={() => {
+          if (typeof navigator !== "undefined" && navigator.vibrate)
+            navigator.vibrate(10);
+          onResetView();
+        }}>Reset view</button
+      >
     {/if}
 
     {#if typeof onShareUrl === "function"}
-      <button class="action-btn" onclick={() => {
-        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-        onShareUrl();
-      }}>Share Graph URL</button>
+      <button
+        class="action-btn"
+        onclick={() => {
+          if (typeof navigator !== "undefined" && navigator.vibrate)
+            navigator.vibrate(10);
+          onShareUrl();
+        }}>Share Graph URL</button
+      >
     {/if}
 
     {#if typeof onExportPng === "function"}
-      <button class="action-btn" onclick={() => {
-        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(10);
-        onExportPng();
-      }}>Export PNG</button>
+      <button
+        class="action-btn"
+        onclick={() => {
+          if (typeof navigator !== "undefined" && navigator.vibrate)
+            navigator.vibrate(10);
+          onExportPng();
+        }}>Export PNG</button
+      >
     {/if}
   </div>
 {/if}

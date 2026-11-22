@@ -13,7 +13,9 @@
       </div>
       <ul class="shortcuts-list">
         <li><span><kbd>Enter</kbd></span><span>New equation line</span></li>
-        <li><span><kbd>+</kbd> / <kbd>-</kbd></span><span>Zoom in / out</span></li>
+        <li>
+          <span><kbd>+</kbd> / <kbd>-</kbd></span><span>Zoom in / out</span>
+        </li>
         <li><span><kbd>Arrow Keys</kbd></span><span>Pan view</span></li>
         <li><span><kbd>?</kbd></span><span>Toggle this help</span></li>
       </ul>

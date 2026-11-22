@@ -1,16 +1,8 @@
 // Sampling via Rust WASM engine + grid helpers
-import initEngine, { get_symbol_values, sample, is_drawable } from '../wasm/grapher_engine.js';
+import { get_symbol_values, sample, is_drawable } from '../utils/engine';
 import { toPlainInfix } from './latex';
 
 
-
-// Module evaluation waits for engine init, so `sample` is always safe to call,
-// even across HMR re-instantiation of the WASM module.
-try {
-  await initEngine();
-} catch (e) {
-  console.error("WASM engine init failed", e);
-}
 
 // Evaluate symbol values from expressions
 export function evaluateSymbols(expressions: string[]): Record<string, number> {

@@ -42,24 +42,27 @@
   let baseScale = 1;
   let baseOffsetX = 0;
   let baseOffsetY = 0;
-
+  let measured = false;
   onMount(() => {
     if (!canvasEl) return;
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         if (width > 0 && height > 0) {
-          const newOffsets = preserveCenterOnResize(
-            cssWidth,
-            cssHeight,
-            width,
-            height,
-            scale,
-            offsetX,
-            offsetY,
-          );
-          offsetX = newOffsets.offsetX;
-          offsetY = newOffsets.offsetY;
+          if (measured) {
+            const newOffsets = preserveCenterOnResize(
+              cssWidth,
+              cssHeight,
+              width,
+              height,
+              scale,
+              offsetX,
+              offsetY,
+            );
+            offsetX = newOffsets.offsetX;
+            offsetY = newOffsets.offsetY;
+          }
+          measured = true;
           cssWidth = width;
           cssHeight = height;
           renderPrecise();

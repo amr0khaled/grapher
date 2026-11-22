@@ -6,22 +6,24 @@
 
   let {
     activeSnap = $bindable<SnapPoint>("peek"),
-    onCanvasTap,
     children,
   }: {
     activeSnap?: SnapPoint;
-    onCanvasTap?: () => void;
     children: Snippet;
   } = $props();
+  const SHEET_HEIGHT = 600; // fixed max sheet height px
+  const TOP_MARGIN = 24;
 
   let dragging = $state(false);
   let dragStartY = 0;
   let dragStartTranslateY = 0;
   let currentTranslateY = $state(0);
   let keyboardOffset = $state(0);
-
-  const SHEET_HEIGHT = 600; // fixed max sheet height px
-
+  let viewportH = $state(window.innerHeight);
+  const minTranslateY = $derived(
+    Math.max(0, SHEET_HEIGHT - (viewportH - keyboardOffset - TOP_MARGIN)),
+  );
+  const getMvk = () => (window as any).mathVirtualKeyboard;
   function getSnapTranslateY(snap: SnapPoint): number {
     switch (snap) {
       case "peek":
@@ -36,8 +38,8 @@
   function nearestSnap(translateY: number): SnapPoint {
     const snaps: { snap: SnapPoint; y: number }[] = [
       { snap: "peek", y: getSnapTranslateY("peek") },
-      { snap: "half", y: getSnapTranslateY("half") },
-      { snap: "full", y: getSnapTranslateY("full") },
+      { snap: "half", y: Math.max(getSnapTranslateY("half"), minTranslateY) },
+      { snap: "full", y: Math.max(getSnapTranslateY("full"), minTranslateY) },
     ];
     let best = snaps[0];
     let minDiff = Infinity;
@@ -57,11 +59,12 @@
   let totalDragDistance = 0;
 
   function onPointerDown(e: PointerEvent) {
-    if (!(e.target as HTMLElement).closest(".drag-handle")) return;
     e.stopPropagation();
-    dragging = true;
+    const startY = computedTranslateY;
+    dragStartTranslateY = startY;
+    currentTranslateY = startY;
     dragStartY = e.clientY;
-    dragStartTranslateY = getSnapTranslateY(activeSnap);
+    dragging = true;
     lastY = e.clientY;
     lastTime = e.timeStamp;
     velocity = 0;
@@ -75,7 +78,7 @@
     const dy = e.clientY - dragStartY;
     totalDragDistance = Math.abs(dy);
     const targetY = dragStartTranslateY + dy;
-    const minY = 0; // full
+    const minY = minTranslateY; // full
     const maxY = SHEET_HEIGHT - 40; // peek
     currentTranslateY = Math.max(minY, Math.min(maxY, targetY));
 
@@ -86,18 +89,22 @@
     lastY = e.clientY;
     lastTime = e.timeStamp;
   }
-
+  const haptic = () => navigator.vibrate?.(10);
   function onPointerUp(e: PointerEvent) {
     e.stopPropagation();
     if (!dragging) return;
     dragging = false;
 
+    // a tap: the click handler on the handle deals with it
     if (totalDragDistance <= 6) {
       if (totalDragDistance <= 1) {
         handleHandleClick(e);
       }
       return;
     }
+
+    // no recent movement means the finger rested before release, so it isn't a flick
+    if (e.timeStamp - lastTime > 80) velocity = 0;
 
     const VELOCITY_THRESHOLD = 0.5;
     let target: SnapPoint;
@@ -112,56 +119,119 @@
       target = nearestSnap(currentTranslateY);
     }
 
-    currentTranslateY = 0;
-    if (activeSnap !== target) {
-      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-        navigator.vibrate(10);
-      }
-    }
+    if (activeSnap !== target) haptic();
     activeSnap = target;
   }
 
-  function handleHandleClick(e: MouseEvent) {
+  function handleHandleClick(_: MouseEvent) {
     if (totalDragDistance > 6) return;
-    if (typeof navigator !== "undefined" && navigator.vibrate)
-      navigator.vibrate(10);
+    haptic();
     if (activeSnap === "peek") {
       activeSnap = "half";
     } else if (activeSnap === "half") {
-      activeSnap = "full";
-    } else {
       activeSnap = "peek";
     }
   }
-
+  let blurTimer = 0;
+  let bodyEl: HTMLElement;
+  let focusedEl = $state<HTMLElement | null>(null);
+  let focusTimer = 0;
   function onFocusIn(e: FocusEvent) {
-    const target = e.target as HTMLElement;
-    if (target && target.closest(".equation-row")) {
-      target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    clearTimeout(blurTimer);
+    focusedEl = e.target as HTMLElement;
+    if (activeSnap === "peek") activeSnap = "half";
+
+    syncKeyboard();
+    // the keyboard may not have its final size yet when focus fires
+    requestAnimationFrame(() => syncKeyboard());
+    focusTimer = setTimeout(syncKeyboard, 100);
+  }
+
+  function onFocusOut(e: FocusEvent) {
+    const next = e.relatedTarget as Node | null;
+    if (next && bodyEl.contains(next)) return; // moving to another field
+    // relatedTarget can be null inside shadow DOM, so check again after a tick
+    blurTimer = window.setTimeout(() => {
+      if (!bodyEl.contains(document.activeElement)) focusedEl = null;
+    }, 150);
+  }
+  function revealInBody(el: HTMLElement) {
+    const pad = 16;
+    const b = bodyEl.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const visibleBottom = Math.min(
+      b.bottom,
+      window.innerHeight - keyboardOffset,
+    );
+
+    if (r.top < b.top + pad) {
+      bodyEl.scrollBy({ top: r.top - b.top - pad, behavior: "smooth" });
+    } else if (r.bottom > visibleBottom - pad) {
+      bodyEl.scrollBy({
+        top: r.bottom - visibleBottom + pad,
+        behavior: "smooth",
+      });
+    }
+  }
+  let hideTimer = 0;
+  function syncKeyboard(notifyHidden = false) {
+    clearTimeout(hideTimer);
+    if (getMvk()?.visible) {
+      keyboardOffset = getMvk()?.boundingRect.height;
+    } else {
+      // only treat as closed if it stays hidden (avoids flicker between fields)
+      hideTimer = window.setTimeout(() => {
+        if (getMvk()?.visible) return;
+        keyboardOffset = 0;
+        if (notifyHidden) onKeyboardHidden();
+      }, 150);
     }
   }
 
-  onMount(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    function onResize() {
-      const vv = window.visualViewport;
-      if (!vv) return;
-      keyboardOffset = Math.max(
-        0,
-        window.innerHeight - vv.height - vv.offsetTop,
-      );
-    }
-    vv.addEventListener("resize", onResize);
-    vv.addEventListener("scroll", onResize);
+  $effect(() => {
+    const el = focusedEl;
+    keyboardOffset; // dependency: keyboard moved/resized
+    activeSnap; // dependency: sheet changed size
+    if (!el) return;
+
+    const align = () => {
+      revealInBody(el);
+      window.scrollTo(0, 0);
+    };
+    const raf = requestAnimationFrame(align);
+    const t = setTimeout(align, 250); // again after the sheet/keyboard animation
     return () => {
-      vv.removeEventListener("resize", onResize);
-      vv.removeEventListener("scroll", onResize);
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
+    };
+  });
+  function onKeyboardHidden() {
+    // whatever you want to happen when it closes, for example:
+    focusedEl = null;
+    if (activeSnap === "full") activeSnap = "half"; // optional
+  }
+  onMount(() => {
+    const onResize = () => (viewportH = window.innerHeight);
+
+    const onToggle = () => syncKeyboard(true);
+    getMvk()?.addEventListener("virtual-keyboard-toggle", onToggle);
+    getMvk()?.addEventListener("geometrychange", onToggle); // also fires on resize or layout change
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      clearTimeout(hideTimer);
+      clearTimeout(focusTimer);
+      getMvk()?.removeEventListener("virtual-keyboard-toggle", onToggle);
+      getMvk()?.removeEventListener("geometrychange", onToggle);
+      window.removeEventListener("resize", onResize);
     };
   });
 
   let computedTranslateY = $derived(
-    dragging ? currentTranslateY : getSnapTranslateY(activeSnap),
+    Math.max(
+      dragging ? currentTranslateY : getSnapTranslateY(activeSnap),
+      minTranslateY,
+    ),
   );
 </script>
 
@@ -176,17 +246,22 @@
   onpointerdown={(e) => e.stopPropagation()}
 >
   <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ore a11y_no_static_element_interactions -->
   <div
     class="drag-handle"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
-    onclick={handleHandleClick}
   >
     <div class="handle-bar"></div>
   </div>
-  <div class="sheet-body" onfocusin={onFocusIn}>
+  <div
+    bind:this={bodyEl}
+    class="sheet-body"
+    style:padding-bottom="{computedTranslateY}px"
+    onfocusin={onFocusIn}
+    onfocusout={onFocusOut}
+  >
     {@render children()}
   </div>
 </div>
@@ -205,6 +280,11 @@
     overflow: hidden;
     will-change: transform;
     transition: transform 300ms cubic-bezier(0.2, 0, 0, 1);
+    max-height: calc(100dvh - var(--kb, 0px) - env(safe-area-inset-top));
+    translate: 0 calc(-1 * var(--kb, 0px));
+    transition:
+      transform 300ms cubic-bezier(0.2, 0, 0, 1),
+      bottom 300ms cubic-bezier(0.2, 0, 0, 1);
   }
   @media (prefers-reduced-motion: reduce) {
     .bottom-sheet {
@@ -240,8 +320,22 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
     padding: 0 12px 12px;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
+    min-height: 0;
+    transition: padding-bottom 300ms cubic-bezier(0.2, 0, 0, 1);
+  }
+  .sheet-body :global(math-field) {
+    scroll-margin-block: 16px;
+  }
+  @media (pointer: coarse) {
+    :global(html),
+    :global(body) {
+      height: 100%;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
   }
 </style>

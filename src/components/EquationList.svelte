@@ -42,5 +42,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    height: auto;
+    overflow: visible;
   }
 </style>
