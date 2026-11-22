@@ -1,6 +1,7 @@
 export function toPlainInfix(latex: string): string {
   if (!latex.trim()) return ""
   let out = latex;
+  console.log("Before", out)
   // Remove \left / \right sizing wrappers first
   out = out.replace(/\\left/g, '').replace(/\\right/g, '');
   // Convert LaTeX superscripts ^{exp} back to ^exp
@@ -9,7 +10,7 @@ export function toPlainInfix(latex: string): string {
   out = out.replace(/([a-zA-Z])_\{([^}]+)\}/g, '$1_$2');
   // Handle \log_{b}(A) and \log_{b} A -> log(A, b)
   out = out.replace(/\\log(?:_\{([^}]+)\}|_(\w+))\s*\(?([^()]+)\)?/g, 'log($3, $1$2)');
-  // Convert fractions \frac{a}{b} back to (a)/(b)
+  // Convert fractions \frac{a}{b} | \fracab back to (a)/(b)
   out = out.replace(/\\frac\s*(?:\{([^}]*)\}|([0-9a-zA-Z]))\s*(?:\{([^}]*)\}|([0-9a-zA-Z]))/g, (_, bNum, sNum, bDen, sDen) => `(${bNum ?? sNum})/(${bDen ?? sDen})`);
   // Convert cdot to *
   out = out.replace(/\\cdot/g, '*');
@@ -17,6 +18,8 @@ export function toPlainInfix(latex: string): string {
   out = out.replace(/\\(sqrt|sum|int)\{([^}]+)\}/g, '$1($2)');
   // Cleanup infinity
   out = out.replace(/\\infty/g, 'infinity');
+  // \operatorname{sinc} -> sinc
+  out = out.replace(/\\operatorname{\s*(?:\\mathrm{)?\s*([a-z-A-Z]+)\s*(?:})?\s*}/g, '$1');
   // Remaining single-word LaTeX commands are function names: \sin -> sin
   out = out.replace(/\\([a-zA-Z]+)/g, '$1');
 
@@ -30,6 +33,7 @@ export function toPlainInfix(latex: string): string {
     return `${p1}*${p2}`;
   });
 
+  console.log("After", out)
   return out;
 }
 
@@ -145,12 +149,18 @@ function replaceFractions(text: string): string {
 // Replace caret '^' with superscript
 function replaceSuperscripts(text: string): string {
   let out = text;
+  let searchFrom = 0;
+
   while (true) {
-    const idx = out.indexOf('^');
+    const idx = out.indexOf('^', searchFrom);
     if (idx === -1) break;
-    // left base: single alphanumeric/token or parenthesized group
+
+    // left base
     let leftStart = idx - 1;
-    if (leftStart < 0) break;
+    if (leftStart < 0) {
+      searchFrom = idx + 1;
+      continue;
+    }
     if (out[leftStart] === ')') {
       let depth = 1;
       leftStart--;
@@ -165,22 +175,36 @@ function replaceSuperscripts(text: string): string {
       leftStart++;
     }
 
-    // right exponent: single token or parenthesized group
+    // right exponent
     let rightEnd = idx + 1;
     if (rightEnd >= out.length) break;
+
+    let exp = '';
     if (out[rightEnd] === '(') {
       const close = matchParen(out, rightEnd);
-      if (close === -1) break;
-      const exp = out.slice(rightEnd + 1, close);
-      const base = out.slice(leftStart, idx);
-      out = out.slice(0, leftStart) + base + '^{' + exp + '}' + out.slice(close + 1);
+      if (close === -1) {
+        searchFrom = idx + 1;
+        continue;
+      }
+      exp = out.slice(rightEnd + 1, close);
+      rightEnd = close + 1;
     } else {
       while (rightEnd < out.length && /[\w.]/.test(out[rightEnd])) rightEnd++;
-      const exp = out.slice(idx + 1, rightEnd);
-      const base = out.slice(leftStart, idx);
-      out = out.slice(0, leftStart) + base + '^{' + exp + '}' + out.slice(rightEnd);
+      exp = out.slice(idx + 1, rightEnd);
     }
+
+    // If nothing matched on the right (e.g., already '^{...}'), skip past it
+    if (!exp) {
+      searchFrom = idx + 1;
+      continue;
+    }
+
+    const base = out.slice(leftStart, idx);
+    const replacement = base + '^{' + exp + '}';
+    out = out.slice(0, leftStart) + replacement + out.slice(rightEnd);
+    searchFrom = leftStart + replacement.length;
   }
+
   return out;
 }
 

@@ -12,4 +12,7 @@ export default defineConfig({
       if (filePath.endsWith('.wasm')) return true;
     },
   },
+  server: {
+    allowedHosts: ["100.122.44.22", "khaldon.manx-luma.ts.net"]
+  }
 })

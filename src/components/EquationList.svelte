@@ -1,6 +1,6 @@
 <script lang="ts">
-  import EquationInput from './EquationInput.svelte';
-  import type { ExpressionLine } from '../types.ts';
+  import EquationInput from "./EquationInput.svelte";
+  import type { ExpressionLine } from "../types.ts";
 
   let {
     expressions,

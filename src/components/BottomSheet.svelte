@@ -76,7 +76,7 @@
     totalDragDistance = Math.abs(dy);
     const targetY = dragStartTranslateY + dy;
     const minY = 0; // full
-    const maxY = SHEET_HEIGHT - 72; // peek
+    const maxY = SHEET_HEIGHT - 40; // peek
     currentTranslateY = Math.max(minY, Math.min(maxY, targetY));
 
     const dt = e.timeStamp - lastTime;
@@ -92,7 +92,12 @@
     if (!dragging) return;
     dragging = false;
 
-    if (totalDragDistance <= 6) return;
+    if (totalDragDistance <= 6) {
+      if (totalDragDistance <= 1) {
+        handleHandleClick(e);
+      }
+      return;
+    }
 
     const VELOCITY_THRESHOLD = 0.5;
     let target: SnapPoint;

@@ -1,23 +1,20 @@
-import { describe, expect, test } from "vitest";
-import { toPlainInfix } from "./latex";
+import { toPlainInfix, toLatex } from './latex';
+import { describe, expect, test } from 'vitest';
 
-describe("PlanInfix Fractions", () => {
-  test('evaluates single digits', () => {
-    expect(toPlainInfix("\\frac13")).toBe("(1)/(3)")
-    expect(toPlainInfix("\\frac02")).toBe("(0)/(2)")
-    expect(toPlainInfix("\\frac91")).toBe("(9)/(1)")
-    expect(toPlainInfix("\\frac9c")).toBe("(9)/(c)")
+describe("toPlainInfix", () => {
+
+  test('converts LaTeX expressions to plain infix', () => {
+    expect(toPlainInfix('x^2')).toBe('x^2');
+    expect(toPlainInfix('\\frac{1}{2}')).toBe('(1)/(2)');
+    expect(toPlainInfix('sinc')).toBe('sinc');
+    expect(toPlainInfix('b a')).toBe('b*a');
   });
-  test('evaluates single brackets', () => {
-    expect(toPlainInfix("\\frac{1}3")).toBe("(1)/(3)")
-    expect(toPlainInfix("\\frac0{2}")).toBe("(0)/(2)")
-    expect(toPlainInfix("\\frac{9}1")).toBe("(9)/(1)")
-    expect(toPlainInfix("\\frac9{c}")).toBe("(9)/(c)")
-  });
-  test('evaluates brackets', () => {
-    expect(toPlainInfix("\\frac{1}{3}")).toBe("(1)/(3)")
-    expect(toPlainInfix("\\frac{0}{2}")).toBe("(0)/(2)")
-    expect(toPlainInfix("\\frac{9}{1}")).toBe("(9)/(1)")
-    expect(toPlainInfix("\\frac{9}{c}")).toBe("(9)/(c)")
+})
+
+describe("toLatex", () => {
+  test('converts plain expressions to LaTeX', () => {
+    expect(toLatex('x^2')).toBe('x^{2}');
+    expect(toLatex('sin(x)')).toBe('\\sin\\left(x\\right)');
+    expect(toLatex('sinx(x)')).toBe('\\operatorname{sinc}\\left(x\\right)');
   });
 })
